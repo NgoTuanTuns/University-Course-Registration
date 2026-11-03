@@ -1,12 +1,19 @@
 """Xác thực và phân quyền (M4).
 
-TUẦN 1 (file này): chỉ có KHUNG để M2/M3 viết code trước khi JWT thật xong.
-  - get_current_user: bản TẠM đọc header `X-Debug-User: <id>:<role>` khi APP_ENV=dev.
-    Ví dụ:  X-Debug-User: 1:student   hoặc   X-Debug-User: 1001:admin  (id sinh viên = số trong svNNNN)
-  - Bản thật dùng JWT sẽ thay vào ở TUẦN 2. Khi đó XÓA nhánh X-Debug-User.
-  - hash_password / verify_password đã là bản thật (bcrypt) vì seed cần dùng ngay.
+  get_current_user : dependency FastAPI đọc `Authorization: Bearer <access_token>`
+                     - không có / sai định dạng / sai chữ ký / sai loại token -> 401 UNAUTHENTICATED
+                     - đúng chữ ký nhưng hết hạn                              -> 401 TOKEN_EXPIRED
+                       (frontend dùng refresh token để lấy token mới)
+  require_role     : dependency factory, sai vai trò -> 403 FORBIDDEN (chỉ có 2 vai trò: student, admin)
+  hash_password / verify_password : bcrypt; verify chạy trong thread pool để không chặn vòng lặp sự kiện
+
+Cách bắt buộc đăng nhập cho một router (M2, M3 thêm vào router của mình):
+    router = APIRouter(prefix="/enroll", dependencies=[Depends(get_current_user)])
+Nếu endpoint cần biết là ai:  user: CurrentUser = Depends(get_current_user)
+
+Token trong test: xem tests/auth_helpers.py (auth_headers).
+Lưu ý: vai trò và email lấy từ token (hết hạn sau ACCESS_TOKEN_TTL_MIN phút), không tra lại DB mỗi request.
 """
-import os
 from dataclasses import dataclass
 from typing import Literal
 
@@ -14,12 +21,8 @@ import bcrypt
 from fastapi import Depends, Header, HTTPException
 from starlette.concurrency import run_in_threadpool
 
-try:  # M5 dựng core/errors.py; chưa có thì dùng bản tạm cùng dạng lỗi chung của dự án
-    from app.core.errors import api_error
-except ImportError:  # pragma: no cover - xóa khối này khi core/errors.py đã có trên main
-
-    def api_error(status: int, code: str, message: str, **extra) -> HTTPException:
-        return HTTPException(status_code=status, detail={"code": code, "message": message, **extra})
+from app.core import tokens
+from app.core.errors import api_error
 
 
 Role = Literal["student", "admin"]
@@ -33,24 +36,20 @@ class CurrentUser:
     email: str
 
 
-async def get_current_user(
-    authorization: str | None = Header(default=None),
-    x_debug_user: str | None = Header(default=None),
-) -> CurrentUser:
-    """Dependency FastAPI: trả người dùng hiện tại hoặc 401."""
-    # --- BẢN TẠM (xóa ở Tuần 2 khi JWT xong) ---
-    if os.getenv("APP_ENV") == "dev" and x_debug_user:
-        try:
-            raw_id, raw_role = x_debug_user.split(":", 1)
-            if raw_role not in ("student", "admin"):
-                raise ValueError
-            return CurrentUser(id=int(raw_id), role=raw_role, email=f"debug{int(raw_id)}@local")
-        except ValueError:
-            raise api_error(401, "UNAUTHENTICATED", "Header X-Debug-User phải có dạng <id>:<student|admin>")
-    # --- hết bản tạm ---
-
-    # TODO(M4, Tuần 2): đọc `authorization` (Bearer), giải mã JWT, phân biệt TOKEN_EXPIRED / UNAUTHENTICATED.
-    raise api_error(401, "UNAUTHENTICATED", "Vui lòng đăng nhập")
+async def get_current_user(authorization: str | None = Header(default=None)) -> CurrentUser:
+    """Trả người dùng hiện tại từ access token, hoặc ném 401."""
+    if not authorization:
+        raise api_error(401, "UNAUTHENTICATED", "Vui lòng đăng nhập")
+    scheme, _, token = authorization.partition(" ")
+    if scheme.lower() != "bearer" or not token.strip():
+        raise api_error(401, "UNAUTHENTICATED", "Vui lòng đăng nhập")
+    try:
+        claims = tokens.decode_token(token.strip(), expected_type=tokens.ACCESS)
+    except tokens.TokenExpiredError:
+        raise api_error(401, "TOKEN_EXPIRED", "Phiên đăng nhập đã hết hạn")
+    except tokens.InvalidTokenError:
+        raise api_error(401, "UNAUTHENTICATED", "Vui lòng đăng nhập")
+    return CurrentUser(id=claims.user_id, role=claims.role, email=claims.email)
 
 
 def require_role(role: Role):
@@ -65,7 +64,7 @@ def require_role(role: Role):
 
 
 def hash_password(plain: str) -> str:
-    """Băm bcrypt (chậm có chủ đích). Đừng gọi trực tiếp trong request async: dùng verify_password."""
+    """Băm bcrypt (chậm có chủ đích)."""
     return bcrypt.hashpw(plain.encode("utf-8"), bcrypt.gensalt(rounds=BCRYPT_ROUNDS)).decode("utf-8")
 
 

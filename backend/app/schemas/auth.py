@@ -1,4 +1,4 @@
-"""Schema xác thực (bản nháp cho M1 làm mock; /auth không có mẫu trong quy ước)."""
+"""Schema xác thực: dạng dữ liệu vào/ra của /auth/login, /auth/refresh và /auth/logout (M1 dùng làm giao diện)."""
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -28,3 +28,7 @@ class TokenResponse(BaseModel):
     token_type: Literal["bearer"] = "bearer"
     expires_in: int  # giây (ACCESS_TOKEN_TTL_MIN * 60)
     user: UserOut
+
+
+class MessageResponse(BaseModel):
+    message: str

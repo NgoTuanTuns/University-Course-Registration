@@ -5,9 +5,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.schemas.prerequisite import OrGroupOut, PrerequisiteCheckResponse
 from app.services import prerequisite_engine as engine
 
-# TODO(M4): sửa 2 import dưới cho khớp tên thật trong core/ của dự án.
-# Khi M4 chưa xong: dùng app.dependency_overrides[get_current_user] để giả lập.
-from app.core.database import get_session
+# M4: đã chuẩn hóa import từ app.core.db và app.core.security theo quy ước nhóm.
+
+from app.core.db import get_session
 from app.core.security import get_current_user
 
 router = APIRouter(prefix="/prerequisites", tags=["prerequisites"])

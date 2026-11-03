@@ -5,7 +5,7 @@
 - `app/services/prerequisite_engine.py` — prerequisite graph and eligibility engine.
 - `app/api/v1/prerequisites.py` — `GET /prerequisites/check` router.
 - `app/schemas/prerequisite.py` — response schemas.
-- `app/core/database.py` — lazy async SQLAlchemy session dependency required by the router.
+- `app/core/db.py` — lazy async SQLAlchemy session dependency required by the router (chuẩn hóa từ database.py theo quy ước nhóm).
 - `tests/test_prerequisite_engine.py` — engine unit tests.
 - `docs/prerequisite-engine.md` — design notes.
 
