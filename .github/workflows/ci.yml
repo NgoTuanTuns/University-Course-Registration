@@ -72,9 +72,25 @@ jobs:
         working-directory: backend
         run: pytest
 
+  detect-frontend:
+    name: Detect frontend package
+    runs-on: ubuntu-latest
+    outputs:
+      has_frontend: ${{ steps.detect.outputs.has_frontend }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: detect
+        run: |
+          if [ -f package.json ]; then
+            echo "has_frontend=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_frontend=false" >> "$GITHUB_OUTPUT"
+          fi
+
   frontend:
     name: Frontend lint, tests, and build
-    if: hashFiles('package.json') != ''
+    needs: detect-frontend
+    if: needs.detect-frontend.outputs.has_frontend == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
