@@ -1,18 +1,15 @@
-"""Cơ sở dữ liệu (SQLAlchemy async) — session dependency.
-
-Quy ước chung của nhóm (QUY_UOC_DU_AN.md, Mục 3 & Mục 6):
-- core/db.py cung cấp get_session (FastAPI dependency trả AsyncSession).
-- Khởi tạo engine/session_maker lười (lazy initialization) để việc import router
-  hoặc chạy unit test không bắt buộc cấu hình DATABASE_URL.
-- get_session KHÔNG tự commit; service quyết định commit/rollback transaction.
-- Hỗ trợ định dạng PostgreSQL tiêu chuẩn (tự động chuyển postgresql:// thành postgresql+asyncpg://).
-"""
+"""Cơ sở dữ liệu (SQLAlchemy async) — session dependency."""
 from __future__ import annotations
 
-import os
 from collections.abc import AsyncIterator
 
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import (
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
+
+from app.core.config import get_settings
 
 _engine = None
 _session_factory: async_sessionmaker[AsyncSession] | None = None
@@ -25,19 +22,23 @@ def _get_session_factory() -> async_sessionmaker[AsyncSession]:
     if _session_factory is not None:
         return _session_factory
 
-    database_url = os.getenv("DATABASE_URL")
-    if not database_url:
-        raise RuntimeError("DATABASE_URL is not configured")
-
-    # Chấp nhận định dạng URL postgresql:// phổ biến và chuyển sang driver asyncpg
+    settings = get_settings()
+    database_url = settings.database_url
     if database_url.startswith("postgresql://"):
         database_url = database_url.replace(
             "postgresql://", "postgresql+asyncpg://", 1
         )
 
-    _engine = create_async_engine(database_url, pool_pre_ping=True)
+    _engine = create_async_engine(
+        database_url,
+        pool_pre_ping=True,
+        pool_size=settings.db_pool_size,
+        max_overflow=settings.db_max_overflow,
+    )
     _session_factory = async_sessionmaker(
-        bind=_engine, class_=AsyncSession, expire_on_commit=False
+        bind=_engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
     )
     return _session_factory
 
@@ -47,7 +48,7 @@ _get_maker = _get_session_factory
 
 
 async def get_session() -> AsyncIterator[AsyncSession]:
-    """Yield một session cho mỗi request; quyền commit/rollback thuộc về caller (service)."""
+    """Yield một session; quyền commit/rollback thuộc về service."""
     factory = _get_session_factory()
     async with factory() as session:
         yield session
