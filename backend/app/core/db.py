@@ -1,4 +1,5 @@
 """Cơ sở dữ liệu (SQLAlchemy async) — session dependency."""
+
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
@@ -25,9 +26,7 @@ def _get_session_factory() -> async_sessionmaker[AsyncSession]:
     settings = get_settings()
     database_url = settings.database_url
     if database_url.startswith("postgresql://"):
-        database_url = database_url.replace(
-            "postgresql://", "postgresql+asyncpg://", 1
-        )
+        database_url = database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
 
     _engine = create_async_engine(
         database_url,

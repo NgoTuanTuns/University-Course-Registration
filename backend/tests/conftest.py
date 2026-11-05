@@ -1,4 +1,5 @@
 """Shared fixtures for backend integration and concurrency tests."""
+
 from __future__ import annotations
 
 import asyncio
@@ -24,27 +25,26 @@ os.environ["REDIS_URL"] = os.environ.get(
     "redis://redis:6379/1",
 )
 
-from alembic import command  # noqa: E402
 from alembic.config import Config  # noqa: E402
 from httpx import ASGITransport, AsyncClient  # noqa: E402
 from redis.asyncio import Redis  # noqa: E402
 from sqlalchemy import text  # noqa: E402
-from sqlalchemy.ext.asyncio import (
-    AsyncSession,
+from sqlalchemy.ext.asyncio import (  # noqa: E402
     async_sessionmaker,
     create_async_engine,
-)  # noqa: E402
+)
 
+from alembic import command  # noqa: E402
 from app.core.db import get_session  # noqa: E402
 from app.core.tokens import create_access_token  # noqa: E402
 from app.main import app  # noqa: E402
-from app.models import (
+from app.models import (  # noqa: E402
     CompletedCourse,
     Course,
     CourseOffering,
     Prerequisite,
     Student,
-)  # noqa: E402
+)
 
 
 def pytest_sessionstart(session: pytest.Session) -> None:
@@ -94,9 +94,12 @@ async def async_client(test_engine, clean_test_data):
             yield session
 
     app.dependency_overrides[get_session] = override_get_session
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
         yield client
     app.dependency_overrides.pop(get_session, None)
+
 
 @pytest.fixture
 def make_student():
@@ -211,6 +214,3 @@ def run_concurrently(test_engine, clean_test_data):
         return await asyncio.gather(*(worker(index) for index in range(task_count)))
 
     return run
-
-
-

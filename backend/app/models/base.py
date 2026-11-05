@@ -4,6 +4,7 @@ naming_convention giúp tên khóa chính / khóa ngoại / unique ổn định,
 `alembic downgrade` không bị lệch tên. Riêng CHECK: mọi CHECK đều phải tự đặt tên đầy đủ
 (ví dụ `ck_offerings_schedule_array`), convention chỉ giữ nguyên tên đó.
 """
+
 from sqlalchemy import MetaData
 from sqlalchemy.orm import DeclarativeBase
 

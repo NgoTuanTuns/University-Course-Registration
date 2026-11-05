@@ -9,19 +9,22 @@ Các trường hợp:
 6. Tra cứu học phần không tồn tại -> 404 NOT_FOUND.
 7. Phân quyền: Sinh viên gọi API admin -> 403 FORBIDDEN; Admin gọi -> thành công.
 """
+
 from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
 from fastapi import HTTPException
 
 from app.core.security import CurrentUser, require_role
 from app.models import Course
-from app.schemas.course import CourseCreate, CourseUpdate
+from app.schemas.course import CourseCreate
 from app.services import course_service
 
 
 @pytest.mark.asyncio
 async def test_create_course_success():
     session = AsyncMock()
+    session.add = MagicMock()
     mock_res = MagicMock()
     mock_res.scalar_one_or_none.return_value = None
     session.execute.return_value = mock_res
@@ -37,7 +40,7 @@ async def test_create_course_success():
     assert course.code == "INT999"
     assert course.name == "Chuyên đề Trí tuệ Nhân tạo"
     assert course.credits == 3
-    assert session.add.called
+    session.add.assert_called_once_with(course)
     assert session.commit.called
 
 
@@ -130,6 +133,12 @@ async def test_delete_course_safe_success():
 
     with patch("app.services.course_service.get_redis") as mock_redis_getter:
         mock_r = AsyncMock()
+
+        async def empty_scan_iter():
+            for key in ():
+                yield key
+
+        mock_r.scan_iter = MagicMock(return_value=empty_scan_iter())
         mock_redis_getter.return_value = mock_r
         await course_service.delete_course(session, 20)
 

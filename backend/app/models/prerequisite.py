@@ -16,9 +16,13 @@ class Prerequisite(Base):
     course_id: Mapped[int] = mapped_column(
         ForeignKey("courses.id", ondelete="CASCADE"), primary_key=True
     )
-    prereq_course_id: Mapped[int] = mapped_column(ForeignKey("courses.id"), primary_key=True)
+    prereq_course_id: Mapped[int] = mapped_column(
+        ForeignKey("courses.id"), primary_key=True
+    )
     type: Mapped[str] = mapped_column(String(3), nullable=False, server_default="AND")
-    group_no: Mapped[int] = mapped_column(SmallInteger, nullable=False, server_default=text("0"))
+    group_no: Mapped[int] = mapped_column(
+        SmallInteger, nullable=False, server_default=text("0")
+    )
 
     __table_args__ = (
         CheckConstraint("type IN ('AND','OR')", name="ck_prereq_type"),

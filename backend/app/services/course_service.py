@@ -7,9 +7,11 @@ Quy ước chung của nhóm:
   Không cho phép xóa học phần nếu đang có lớp học phần mở, có trong bảng điểm
   hoặc đang là môn tiên quyết của môn khác.
 """
+
 from __future__ import annotations
 
 import logging
+
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -67,9 +69,13 @@ async def create_course(session: AsyncSession, data: CourseCreate) -> Course:
     name_normalized = data.name.strip()
 
     # Kiểm tra mã đã tồn tại
-    existing = await session.execute(select(Course).where(Course.code == code_normalized))
+    existing = await session.execute(
+        select(Course).where(Course.code == code_normalized)
+    )
     if existing.scalar_one_or_none() is not None:
-        raise api_error(409, "ALREADY_EXISTS", f"Mã học phần '{code_normalized}' đã tồn tại")
+        raise api_error(
+            409, "ALREADY_EXISTS", f"Mã học phần '{code_normalized}' đã tồn tại"
+        )
 
     course = Course(
         code=code_normalized,
@@ -83,7 +89,9 @@ async def create_course(session: AsyncSession, data: CourseCreate) -> Course:
     return course
 
 
-async def update_course(session: AsyncSession, course_id: int, data: CourseUpdate) -> Course:
+async def update_course(
+    session: AsyncSession, course_id: int, data: CourseUpdate
+) -> Course:
     """Cập nhật thông tin học phần (tên, tín chỉ, mô tả)."""
     course = await get_course_by_id(session, course_id)
 
@@ -111,7 +119,9 @@ async def delete_course(session: AsyncSession, course_id: int) -> None:
 
     # 1. Kiểm tra lớp học phần (course_offerings)
     offering_count_res = await session.execute(
-        select(func.count()).select_from(CourseOffering).where(CourseOffering.course_id == course_id)
+        select(func.count())
+        .select_from(CourseOffering)
+        .where(CourseOffering.course_id == course_id)
     )
     offering_count = offering_count_res.scalar_one()
     if offering_count > 0:
@@ -119,27 +129,39 @@ async def delete_course(session: AsyncSession, course_id: int) -> None:
 
     # 2. Kiểm tra là môn tiên quyết của môn khác (prerequisites.prereq_course_id)
     prereq_of_res = await session.execute(
-        select(func.count()).select_from(Prerequisite).where(Prerequisite.prereq_course_id == course_id)
+        select(func.count())
+        .select_from(Prerequisite)
+        .where(Prerequisite.prereq_course_id == course_id)
     )
     prereq_of_count = prereq_of_res.scalar_one()
     if prereq_of_count > 0:
-        reasons.append(f"Đang là điều kiện tiên quyết cho {prereq_of_count} môn học khác")
+        reasons.append(
+            f"Đang là điều kiện tiên quyết cho {prereq_of_count} môn học khác"
+        )
 
     # 3. Kiểm tra môn học có điều kiện tiên quyết (prerequisites.course_id)
     has_prereq_res = await session.execute(
-        select(func.count()).select_from(Prerequisite).where(Prerequisite.course_id == course_id)
+        select(func.count())
+        .select_from(Prerequisite)
+        .where(Prerequisite.course_id == course_id)
     )
     has_prereq_count = has_prereq_res.scalar_one()
     if has_prereq_count > 0:
-        reasons.append(f"Môn học đang có {has_prereq_count} điều kiện tiên quyết liên kết")
+        reasons.append(
+            f"Môn học đang có {has_prereq_count} điều kiện tiên quyết liên kết"
+        )
 
     # 4. Kiểm tra đã có sinh viên hoàn thành (completed_courses)
     completed_res = await session.execute(
-        select(func.count()).select_from(CompletedCourse).where(CompletedCourse.course_id == course_id)
+        select(func.count())
+        .select_from(CompletedCourse)
+        .where(CompletedCourse.course_id == course_id)
     )
     completed_count = completed_res.scalar_one()
     if completed_count > 0:
-        reasons.append(f"Đã có {completed_count} sinh viên có điểm hoàn thành môn học này")
+        reasons.append(
+            f"Đã có {completed_count} sinh viên có điểm hoàn thành môn học này"
+        )
 
     if reasons:
         raise api_error(

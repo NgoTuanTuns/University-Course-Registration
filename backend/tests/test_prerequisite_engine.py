@@ -1,4 +1,5 @@
 """Test lõi engine trên DAG mẫu trong bộ nhớ (bảng ca nghiệm thu Mục 6.1)."""
+
 import pytest
 
 from app.services.prerequisite_engine import (
@@ -11,14 +12,22 @@ from app.services.prerequisite_engine import (
 )
 
 EDGES = [
-    ("B1", "A1", "AND", 0), ("B2", "A1", "AND", 0),
+    ("B1", "A1", "AND", 0),
+    ("B2", "A1", "AND", 0),
     ("C1", "B1", "AND", 0),
-    ("D1", "B1", "AND", 0), ("D1", "B2", "AND", 0),
-    ("E1", "A2", "OR", 1), ("E1", "A3", "OR", 1),
-    ("F1", "C1", "AND", 0), ("F1", "A2", "OR", 1), ("F1", "A3", "OR", 1),
-    ("G1", "A2", "OR", 1), ("G1", "A3", "OR", 1),
-    ("G1", "B1", "OR", 2), ("G1", "B2", "OR", 2),
-    ("H1", "C1", "OR", 1), ("H1", "E1", "OR", 1),
+    ("D1", "B1", "AND", 0),
+    ("D1", "B2", "AND", 0),
+    ("E1", "A2", "OR", 1),
+    ("E1", "A3", "OR", 1),
+    ("F1", "C1", "AND", 0),
+    ("F1", "A2", "OR", 1),
+    ("F1", "A3", "OR", 1),
+    ("G1", "A2", "OR", 1),
+    ("G1", "A3", "OR", 1),
+    ("G1", "B1", "OR", 2),
+    ("G1", "B2", "OR", 2),
+    ("H1", "C1", "OR", 1),
+    ("H1", "E1", "OR", 1),
 ]
 
 
@@ -29,26 +38,26 @@ def graph():
 
 # (đã học, môn xét, eligible, tập môn thiếu, {group_no: lựa chọn} chưa đạt)
 CASES = [
-    (set(), "A1", True, set(), {}),                                   # 1
-    (set(), "B1", False, {"A1"}, {}),                                 # 2
-    ({"A1"}, "B1", True, set(), {}),                                  # 3
-    (set(), "C1", False, {"B1", "A1"}, {}),                           # 4 bắc cầu
-    ({"A1"}, "C1", False, {"B1"}, {}),                                # 5
-    ({"B1"}, "C1", True, set(), {}),                                  # 6 (phụ thuộc điểm 1)
-    ({"A1"}, "D1", False, {"B1", "B2"}, {}),                          # 7
-    (set(), "D1", False, {"B1", "B2", "A1"}, {}),                     # 8 kim cương
-    ({"A1", "B1", "B2"}, "D1", True, set(), {}),                      # 9
-    (set(), "E1", False, set(), {1: {"A2", "A3"}}),                   # 10
-    ({"A3"}, "E1", True, set(), {}),                                  # 11
-    ({"A2", "A3"}, "E1", True, set(), {}),                            # 12
-    ({"A2"}, "F1", False, {"C1", "B1", "A1"}, {}),                    # 13
-    ({"A1", "B1", "C1"}, "F1", False, set(), {1: {"A2", "A3"}}),     # 14
-    ({"A1", "B1", "C1", "A2"}, "F1", True, set(), {}),                # 15
-    ({"A2"}, "G1", False, set(), {2: {"B1", "B2"}}),                  # 16
-    ({"A2", "B2"}, "G1", True, set(), {}),                            # 17
-    ({"B1"}, "G1", False, set(), {1: {"A2", "A3"}}),                  # 18
-    ({"C1"}, "H1", True, set(), {}),                                  # 19
-    ({"E1"}, "H1", True, set(), {}),                                  # 20
+    (set(), "A1", True, set(), {}),  # 1
+    (set(), "B1", False, {"A1"}, {}),  # 2
+    ({"A1"}, "B1", True, set(), {}),  # 3
+    (set(), "C1", False, {"B1", "A1"}, {}),  # 4 bắc cầu
+    ({"A1"}, "C1", False, {"B1"}, {}),  # 5
+    ({"B1"}, "C1", True, set(), {}),  # 6 (phụ thuộc điểm 1)
+    ({"A1"}, "D1", False, {"B1", "B2"}, {}),  # 7
+    (set(), "D1", False, {"B1", "B2", "A1"}, {}),  # 8 kim cương
+    ({"A1", "B1", "B2"}, "D1", True, set(), {}),  # 9
+    (set(), "E1", False, set(), {1: {"A2", "A3"}}),  # 10
+    ({"A3"}, "E1", True, set(), {}),  # 11
+    ({"A2", "A3"}, "E1", True, set(), {}),  # 12
+    ({"A2"}, "F1", False, {"C1", "B1", "A1"}, {}),  # 13
+    ({"A1", "B1", "C1"}, "F1", False, set(), {1: {"A2", "A3"}}),  # 14
+    ({"A1", "B1", "C1", "A2"}, "F1", True, set(), {}),  # 15
+    ({"A2"}, "G1", False, set(), {2: {"B1", "B2"}}),  # 16
+    ({"A2", "B2"}, "G1", True, set(), {}),  # 17
+    ({"B1"}, "G1", False, set(), {1: {"A2", "A3"}}),  # 18
+    ({"C1"}, "H1", True, set(), {}),  # 19
+    ({"E1"}, "H1", True, set(), {}),  # 20
 ]
 
 
@@ -72,11 +81,11 @@ def test_find_cycle_none_on_valid_graph(graph):
 @pytest.mark.parametrize(
     "course,prereq,expected",
     [
-        ("A1", "B1", ["A1", "B1", "A1"]),            # C1
-        ("A1", "C1", ["A1", "C1", "B1", "A1"]),      # C2
-        ("B1", "B1", ["B1", "B1"]),                  # C3 tự trỏ
-        ("D1", "A2", None),                          # C4
-        ("C1", "A1", None),                          # C5 dư thừa nhưng hợp lệ
+        ("A1", "B1", ["A1", "B1", "A1"]),  # C1
+        ("A1", "C1", ["A1", "C1", "B1", "A1"]),  # C2
+        ("B1", "B1", ["B1", "B1"]),  # C3 tự trỏ
+        ("D1", "A2", None),  # C4
+        ("C1", "A1", None),  # C5 dư thừa nhưng hợp lệ
     ],
 )
 def test_would_create_cycle(graph, course, prereq, expected):

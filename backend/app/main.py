@@ -1,10 +1,12 @@
 """Điểm khởi tạo FastAPI và các router dùng chung."""
+
 from __future__ import annotations
 
 import logging
 import sys
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import AsyncIterator
+from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -54,7 +56,7 @@ app.include_router(prerequisites.router, prefix=api_router_prefix)
 
 @app.get("/health", tags=["health"])
 async def health(
-    session: AsyncSession = Depends(get_session),
+    session: Annotated[AsyncSession, Depends(get_session)],
 ) -> dict[str, str]:
     try:
         await session.execute(text("SELECT 1"))

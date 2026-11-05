@@ -13,11 +13,12 @@ không xét lại tổ tiên của nó. Môn CHƯA học thì mở rộng tiếp
 nó để liệt kê đủ chuỗi cần học.
 Tất cả duyệt bằng vòng lặp/hàng đợi, không đệ quy (giới hạn ~1000 của Python).
 """
+
 from __future__ import annotations
 
 from collections import deque
+from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
-from typing import Iterable
 
 CourseId = int | str
 
@@ -42,7 +43,7 @@ class PrerequisiteGraph:
     @classmethod
     def from_edges(
         cls, edges: Iterable[tuple[CourseId, CourseId, str, int]]
-    ) -> "PrerequisiteGraph":
+    ) -> PrerequisiteGraph:
         """edges: (course_id, prereq_course_id, type, group_no)."""
         g = cls()
         for course, prereq, kind, group_no in edges:
@@ -51,7 +52,9 @@ class PrerequisiteGraph:
             elif kind == "OR":
                 if group_no < 1:
                     raise ValueError("Cạnh OR phải có group_no >= 1")
-                g.or_groups.setdefault(course, {}).setdefault(group_no, set()).add(prereq)
+                g.or_groups.setdefault(course, {}).setdefault(group_no, set()).add(
+                    prereq
+                )
             else:
                 raise ValueError(f"type không hợp lệ: {kind!r}")
         return g
@@ -145,7 +148,7 @@ def find_cycle(graph: PrerequisiteGraph) -> list[CourseId] | None:
                 continue
             state = color.get(nxt, WHITE)
             if state == GRAY:  # gặp node đang trong đường đi hiện tại -> có vòng
-                return path[path.index(nxt):] + [nxt]
+                return path[path.index(nxt) :] + [nxt]
             if state == WHITE:
                 color[nxt] = GRAY
                 path.append(nxt)
@@ -194,6 +197,7 @@ def assert_acyclic(edges: Iterable[tuple[CourseId, CourseId, str, int]]) -> None
 # ----------------------------------------------------------------------------
 async def load_edges(session) -> list[tuple[int, int, str, int]]:
     from sqlalchemy import select
+
     from app.models.prerequisite import Prerequisite
 
     rows = await session.execute(
@@ -209,25 +213,33 @@ async def load_edges(session) -> list[tuple[int, int, str, int]]:
 
 async def load_completed(session, student_id: int) -> set[int]:
     from sqlalchemy import select
+
     from app.models.completed_course import CompletedCourse
 
     rows = await session.execute(
-        select(CompletedCourse.course_id).where(CompletedCourse.student_id == student_id)
+        select(CompletedCourse.course_id).where(
+            CompletedCourse.student_id == student_id
+        )
     )
     return {r[0] for r in rows.all()}
 
 
 async def load_course_codes(session, ids: set[int]) -> dict[int, str]:
     from sqlalchemy import select
+
     from app.models.course import Course
 
     if not ids:
         return {}
-    rows = await session.execute(select(Course.id, Course.code).where(Course.id.in_(ids)))
+    rows = await session.execute(
+        select(Course.id, Course.code).where(Course.id.in_(ids))
+    )
     return {r[0]: r[1] for r in rows.all()}
 
 
-async def check_eligibility(session, student_id: int, course_id: int) -> EligibilityResult:
+async def check_eligibility(
+    session, student_id: int, course_id: int
+) -> EligibilityResult:
     """Giao diện cho M3 gọi trong /enroll. CHỈ ĐỌC, dùng chung session của M3
     (không commit/rollback). missing_courses là MÃ MÔN (vd "INT131")."""
     graph = PrerequisiteGraph.from_edges(await load_edges(session))

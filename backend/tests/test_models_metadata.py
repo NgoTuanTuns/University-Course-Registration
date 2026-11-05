@@ -2,16 +2,27 @@
 
 Chạy:  cd backend && python -m pytest tests/test_models_metadata.py
 """
+
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.schema import CreateIndex, CreateTable
 
 from app.models import Base
 
-TABLES = {"students", "courses", "course_offerings", "prerequisites", "completed_courses", "enrollments", "waitlist"}
+TABLES = {
+    "students",
+    "courses",
+    "course_offerings",
+    "prerequisites",
+    "completed_courses",
+    "enrollments",
+    "waitlist",
+}
 
 
 def _ddl(table: str) -> str:
-    return str(CreateTable(Base.metadata.tables[table]).compile(dialect=postgresql.dialect()))
+    return str(
+        CreateTable(Base.metadata.tables[table]).compile(dialect=postgresql.dialect())
+    )
 
 
 def test_exactly_seven_tables():
@@ -25,7 +36,11 @@ def test_primary_keys_are_identity_by_default():
 
 def test_check_constraints_are_named():
     expected = {
-        "students": ["ck_students_role", "ck_students_max_credits", "ck_students_student_has_mssv"],
+        "students": [
+            "ck_students_role",
+            "ck_students_max_credits",
+            "ck_students_student_has_mssv",
+        ],
         "courses": ["ck_courses_credits"],
         "course_offerings": ["ck_offerings_capacity", "ck_offerings_enrolled_range"],
         "prerequisites": ["ck_prereq_type", "ck_prereq_no_self", "ck_prereq_group"],
@@ -45,10 +60,16 @@ def test_schedule_is_jsonb():
 
 def test_active_enrollment_is_partial_unique_index():
     idx = {i.name: i for i in Base.metadata.tables["enrollments"].indexes}
-    sql = str(CreateIndex(idx["uq_enrollments_active"]).compile(dialect=postgresql.dialect()))
+    sql = str(
+        CreateIndex(idx["uq_enrollments_active"]).compile(dialect=postgresql.dialect())
+    )
     assert "CREATE UNIQUE INDEX uq_enrollments_active" in sql
     assert "WHERE status = 'ACTIVE'" in sql
-    assert set(idx) == {"uq_enrollments_active", "ix_enrollments_student", "ix_enrollments_offering"}
+    assert set(idx) == {
+        "uq_enrollments_active",
+        "ix_enrollments_student",
+        "ix_enrollments_offering",
+    }
 
 
 def test_cascade_rules():

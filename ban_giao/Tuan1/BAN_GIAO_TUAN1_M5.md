@@ -4,7 +4,7 @@
 **Người bàn giao:** M5  |  **Ngày cập nhật:** 05/11/2026  |  **Căn cứ:** `chitietcongviec/M5_cong_viec_7_tuan.md` và `chitietcongviec/QUY_UOC_DU_AN.md`  
 **Nhánh:** `trung-devops-compose-ci`  |  **Pull request:** #3 — chưa merge vào `main`
 
-> **Trạng thái chung: ĐANG LÀM — chưa hoàn tất Tuần 1, kể cả khi tạm bỏ qua việc M4 review.** Nền tảng Compose, `core/`, CI và test đã được thêm vào PR. Đã xác nhận chạy `db`, `redis`, `api`, migration và seed. Chưa xác nhận chạy đủ 5 dịch vụ, CI lint/test, khung test và GitHub Project trên môi trường sạch.
+> **Trạng thái chung: ĐANG LÀM — chưa hoàn tất Tuần 1, kể cả khi tạm bỏ qua việc M4 review. README đã được thêm trong working copy; cần commit/push và xác nhận CI/Ruff sau đó.** Nền tảng Compose, `core/`, CI và test đã được thêm vào PR. Đã xác nhận chạy `db`, `redis`, `api`, migration và seed. Chưa xác nhận chạy đủ 5 dịch vụ, CI trên GitHub sau push, xử lý 2 warnings và dựng GitHub Project/máy sạch.
 
 ---
 
@@ -17,7 +17,7 @@ Tuần 1 của M5 dựng môi trường chung để cả nhóm chạy ứng dụ
 2. Thêm/cập nhật backend `core/`, endpoint health, cấu hình lỗi và cấu hình môi trường.
 3. Thêm workflow CI, PR template, fixture/test utilities và hướng dẫn test.
 4. Bạn đã chạy được các container `db`, `redis`, `api`; chạy migration và seed thành công. Seed báo 1.001 sinh viên, 200 học phần, 357 lớp học phần, 12.668 môn đã hoàn thành, 53 lượt đăng ký và 3 hàng chờ.
-5. PR hiện báo **All checks have passed**, trong đó **GitGuardian là check bị skipped** sau khi được gắn nhãn test credential. Điều này không chứng minh các job lint/test đã chạy thành công.
+5. Ở ảnh PR mới nhất, có **2 check thất bại** (Backend CI và GitGuardian), 1 job frontend bị skipped, 2 job thành công. Sau ảnh đó Ruff lint và format đã đạt trên máy local; pytest báo 75 passed, 2 warnings. Các thay đổi chưa được xác nhận đã push, nên trạng thái remote chưa được cập nhật.
 
 **Còn thiếu:** xác nhận toàn bộ `nginx`/`web`/`api`/`db`/`redis` chạy cùng nhau; xác nhận job CI backend/frontend; chạy khung test; dựng GitHub Project; M4 chạy thử và review PR.
 
@@ -27,6 +27,7 @@ Tuần 1 của M5 dựng môi trường chung để cả nhóm chạy ứng dụ
 
 | File/nhóm file trong PR | Nội dung | Trạng thái |
 |---|---|---|
+| `README.md` | Hướng dẫn dựng môi trường Windows, migrate, seed, test và khắc phục volume test DB cũ | Đã tạo trong working copy; chưa xác nhận đã commit/push |
 | `docker-compose.yml`, `Dockerfile.api`, `Dockerfile.web` | Khung Compose và image cho các dịch vụ | Đã thêm; chỉ `db`, `redis`, `api` được xác nhận chạy |
 | `nginx/default.conf`, `vite.docker.config.ts` | Reverse proxy và cấu hình Vite trong container | Đã thêm; chưa xác nhận smoke test toàn bộ UI |
 | `.env.example`, `.dockerignore`, `.gitattributes`, `.gitignore` | Mẫu môi trường, bỏ qua file và chuẩn LF | Đã thêm |
@@ -92,6 +93,7 @@ docker compose down
 
 - [x] Đã thêm cấu hình 5 dịch vụ theo cổng nhóm: Nginx `8080`, web `5173`, API `8000`, PostgreSQL `5433`, Redis `6380`.
 - [x] Đã thêm healthcheck/dependency, volume DB, polling/hot reload cho môi trường Windows và cấu hình Nginx.
+- [x] `docker compose config --quiet` đã kiểm tra tĩnh thành công; việc này chưa thay thế chạy đủ dịch vụ.
 - [x] Đã thêm cấu hình DB test `course_reg_test` và mẫu biến môi trường.
 - [ ] Đã chạy và kiểm tra đủ cả 5 dịch vụ bằng lệnh nhóm `docker compose up --build`.
 - [ ] Thành viên khác dựng được hệ thống từ máy sạch theo hướng dẫn.
@@ -105,9 +107,11 @@ docker compose down
 ### 5.3 CI và PR
 
 - [x] Đã thêm `.github/workflows/ci.yml` và PR template.
+- [ ] Điều kiện `hashFiles()` ở job frontend đã được thay bằng job dò package; trong working copy workflow còn chỉnh để chạy push trên nhánh feature, chưa được push/xác nhận.
 - [x] PR #3 đã mở từ nhánh riêng; không thay đổi `main`.
-- [x] GitHub hiện báo “All checks have passed”; check GitGuardian được **skipped** với nhãn test credential.
-- [ ] Chưa xác nhận các job backend/frontend thực sự chạy `ruff`, migration, pytest, npm lint/typecheck/build và đều xanh.
+- [ ] Ảnh PR mới nhất báo Backend CI và GitGuardian thất bại; frontend job bị skipped. GitGuardian từng được skip cho một lượt chạy cũ, nhưng commit mới làm phát sinh lượt check mới.
+- [x] Ruff lint và format đạt trên máy local: `ruff check app tests` và `ruff format --check app tests` đều qua.
+- [ ] Chưa push các sửa đổi Ruff lên PR để xác nhận Backend CI trên GitHub.
 - [ ] Chưa xác nhận branch protection của `main` yêu cầu PR, check phù hợp và approval.
 - [ ] Chưa xác nhận các nhãn issue và hướng dẫn pre-commit được thiết lập.
 
@@ -121,9 +125,11 @@ docker compose down
 ### 5.5 Khung test backend
 
 - [x] Đã thêm cấu hình pytest, marker, timeout/coverage và `backend/tests/conftest.py` với fixture/factory theo thiết kế.
-- [x] Đã thêm `backend/docs/test-guide.md`.
-- [ ] Chưa xác nhận toàn bộ fixture chạy thành công trên `course_reg_test` và Redis DB 1.
-- [ ] Chưa xác nhận `docker compose exec api pytest` hoặc CI test job đạt.
+- [x] Đã thêm `backend/docs/test-guide.md`, trong đó ghi rõ không chạy pytest-xdist trên cùng test DB/Redis.
+- [x] `pytest` chạy trên máy người dùng: 75 passed, 2 warnings.
+- [ ] Cần xem nội dung 2 warnings; CI trên GitHub chưa được xác nhận sau các sửa đổi.
+- [x] `docker compose exec api pytest` đạt cục bộ: 75 passed.
+- [ ] CI test job trên GitHub cần chạy lại sau khi push.
 - [ ] Chưa xác nhận test tranh chấp dùng nhiều session riêng/rào chắn được thực thi thành công.
 
 ---
@@ -131,7 +137,7 @@ docker compose down
 ## 6. Điểm lưu ý và rủi ro
 
 1. **PR #3 chưa được M4 review.** Việc M4 xem/chạy thử PR là yêu cầu vòng review của nhóm; PR hiện chưa được merge.
-2. **GitGuardian:** có bốn phát hiện trên giá trị mẫu `doi_mat_khau_nay`. Check hiện được skip như test credential; finding vẫn được liệt kê trong lịch sử quét. Trạng thái “All checks have passed” không đồng nghĩa với việc giá trị đã bị xóa hoặc các job lint/test đã chạy.
+2. **GitGuardian:** có bốn phát hiện trên giá trị placeholder DB cũ. Check đã từng được skip như test credential ở một lượt; lượt mới nhất trong ảnh lại thất bại và finding vẫn được liệt kê. Trạng thái skip không đồng nghĩa với việc giá trị đã bị xóa hoặc các job lint/test đã chạy.
 3. **M1/frontend:** chưa xác nhận source frontend của M1 đã có trên nhánh M5 này; do đó chưa thể xác nhận dịch vụ `web`/Nginx phục vụ UI. Việc này không làm mất kết quả chạy API/DB/Redis đã xác nhận, nhưng chặn kiểm chứng toàn bộ ứng dụng.
 4. **Test chưa chạy:** không đánh dấu khung test hoàn tất chỉ vì đã thêm fixture/config; cần chạy thật và ghi lại kết quả.
 5. **Dữ liệu seed:** lần seed thành công đã tạo dữ liệu demo; không dùng `docker compose down -v` nếu muốn giữ DB hiện tại.
@@ -144,7 +150,7 @@ docker compose down
 |---|---|---|
 | **M5** | Xác nhận CI backend/frontend chạy lint, migration và test; ghi lại kết quả cụ thể | [ ] |
 | **M5** | Chạy full `docker compose up --build` và xác nhận Nginx/web/API/DB/Redis cùng hoạt động | [ ] |
-| **M5** | Chạy `docker compose exec api pytest`; xử lý lỗi fixture/test nếu có | [ ] |
+| **M5** | Chạy `docker compose exec api pytest`; xử lý lỗi fixture/test nếu có | [x] 75 passed, 2 warnings; xem warning và CI sau push |
 | **M5** | Tạo/cập nhật GitHub Project, cột và issue theo quy ước | [ ] |
 | **M4** | Chạy thử theo hướng dẫn trên Windows và review PR #3; gửi góp ý trước khi merge | [ ] |
 | **M1** | Xác nhận thời điểm/nhánh tích hợp frontend để M5 kiểm tra dịch vụ web và luồng qua Nginx | [ ] |
@@ -173,4 +179,8 @@ Chỉ bắt đầu các sản phẩm Tuần 2 theo kế hoạch M5 sau khi xử 
 - [ ] Thành viên khác, theo vòng là M4, đã đọc và chạy thử PR #3; góp ý đã được xử lý.
 - [ ] Bảng GitHub Project/issue và báo cáo tuần đã được tạo/cập nhật.
 - [ ] PR chưa được merge vào `main` cho tới khi hoàn tất review theo quy ước nhóm.
+
+
+
+
 

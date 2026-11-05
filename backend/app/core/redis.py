@@ -1,4 +1,5 @@
 """Shared asynchronous Redis client."""
+
 from __future__ import annotations
 
 import logging
@@ -66,10 +67,7 @@ async def consume_refresh_token(student_id: int, jti: str) -> bool:
 async def revoke_all_user_tokens(student_id: int) -> int:
     try:
         client = get_redis()
-        keys = [
-            key
-            async for key in client.scan_iter(match=f"refresh:{student_id}:*")
-        ]
+        keys = [key async for key in client.scan_iter(match=f"refresh:{student_id}:*")]
         if keys:
             return await client.delete(*keys)
         return 0

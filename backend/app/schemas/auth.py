@@ -1,4 +1,5 @@
 """Schema xác thực: dạng dữ liệu vào/ra của /auth/login, /auth/refresh và /auth/logout (M1 dùng làm giao diện)."""
+
 from typing import Literal
 
 from pydantic import BaseModel, Field

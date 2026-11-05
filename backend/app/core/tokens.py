@@ -8,10 +8,11 @@ Hai loại token, không dùng thay nhau được (claim `type`):
     access  - gửi kèm mỗi request:  Authorization: Bearer <access_token>
     refresh - chỉ dùng để xin access token mới ở POST /auth/refresh
 """
+
 import os
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import jwt
 
@@ -20,7 +21,9 @@ ACCESS = "access"
 REFRESH = "refresh"
 VALID_ROLES = ("student", "admin")
 MIN_SECRET_LENGTH = 32
-_PLACEHOLDER_SECRET = "doi_thanh_chuoi_bat_ky_dai_mot_chut"  # giá trị mẫu trong .env.example
+_PLACEHOLDER_SECRET = (
+    "doi_thanh_chuoi_bat_ky_dai_mot_chut"  # giá trị mẫu trong .env.example
+)
 
 
 class TokenExpiredError(Exception):
@@ -45,8 +48,12 @@ def get_secret() -> str:
     secret = os.environ.get("JWT_SECRET", "")
     if not secret:
         raise RuntimeError("Chưa đặt JWT_SECRET trong .env")
-    if os.environ.get("APP_ENV") == "prod" and (secret == _PLACEHOLDER_SECRET or len(secret) < MIN_SECRET_LENGTH):
-        raise RuntimeError(f"JWT_SECRET quá yếu cho môi trường prod: cần chuỗi riêng dài ít nhất {MIN_SECRET_LENGTH} ký tự")
+    if os.environ.get("APP_ENV") == "prod" and (
+        secret == _PLACEHOLDER_SECRET or len(secret) < MIN_SECRET_LENGTH
+    ):
+        raise RuntimeError(
+            f"JWT_SECRET quá yếu cho môi trường prod: cần chuỗi riêng dài ít nhất {MIN_SECRET_LENGTH} ký tự"
+        )
     return secret
 
 
@@ -58,8 +65,10 @@ def refresh_ttl_seconds() -> int:
     return int(os.environ.get("REFRESH_TOKEN_TTL_DAYS", "7")) * 86400
 
 
-def _encode(user_id: int, role: str, email: str, token_type: str, ttl_seconds: int) -> str:
-    now = datetime.now(timezone.utc)
+def _encode(
+    user_id: int, role: str, email: str, token_type: str, ttl_seconds: int
+) -> str:
+    now = datetime.now(UTC)
     payload = {
         "sub": str(user_id),  # chuẩn JWT yêu cầu `sub` là chuỗi
         "role": role,
@@ -86,10 +95,14 @@ def decode_token(token: str, expected_type: str) -> TokenClaims:
         payload = jwt.decode(
             token,
             get_secret(),
-            algorithms=[ALGORITHM],  # chỉ nhận HS256, chặn kiểu tấn công đổi thuật toán (alg=none)
+            algorithms=[
+                ALGORITHM
+            ],  # chỉ nhận HS256, chặn kiểu tấn công đổi thuật toán (alg=none)
             options={"require": ["exp", "iat", "sub", "type"]},
         )
-    except jwt.ExpiredSignatureError as exc:  # phải bắt trước PyJWTError vì nó là lớp con
+    except (
+        jwt.ExpiredSignatureError
+    ) as exc:  # phải bắt trước PyJWTError vì nó là lớp con
         raise TokenExpiredError from exc
     except jwt.PyJWTError as exc:
         raise InvalidTokenError from exc

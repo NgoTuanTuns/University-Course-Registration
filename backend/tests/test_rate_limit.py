@@ -7,8 +7,10 @@ Các trường hợp:
 4. Nhận diện IP máy khách chính xác (X-Forwarded-For, X-Real-IP).
 5. Redis gặp sự cố: ghi log cảnh báo và cho qua (ưu tiên khả dụng).
 """
+
 import os
 from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
 from fastapi import HTTPException, Request
 
@@ -24,7 +26,9 @@ async def test_rate_limit_allowed():
     mock_redis = AsyncMock()
     mock_redis.eval.return_value = [1, 4]
     with patch("app.core.rate_limit.get_redis", return_value=mock_redis):
-        await check_rate_limit("login", "127.0.0.1:test@uni.edu.vn", limit=5, window_seconds=60)
+        await check_rate_limit(
+            "login", "127.0.0.1:test@uni.edu.vn", limit=5, window_seconds=60
+        )
         assert mock_redis.eval.called
 
 
@@ -34,7 +38,9 @@ async def test_rate_limit_exceeded_raises_429():
     mock_redis.eval.return_value = [0, 45]
     with patch("app.core.rate_limit.get_redis", return_value=mock_redis):
         with pytest.raises(HTTPException) as exc_info:
-            await check_rate_limit("login", "127.0.0.1:test@uni.edu.vn", limit=5, window_seconds=60)
+            await check_rate_limit(
+                "login", "127.0.0.1:test@uni.edu.vn", limit=5, window_seconds=60
+            )
 
         assert exc_info.value.status_code == 429
         assert exc_info.value.detail["code"] == "RATE_LIMITED"
@@ -78,4 +84,6 @@ def test_get_client_ip():
 async def test_rate_limit_redis_failure_fails_open():
     with patch("app.core.rate_limit.get_redis", side_effect=Exception("Redis down")):
         # Không ném lỗi khi Redis gặp sự cố
-        await check_rate_limit("login", "127.0.0.1:sv@uni.edu.vn", limit=5, window_seconds=60)
+        await check_rate_limit(
+            "login", "127.0.0.1:sv@uni.edu.vn", limit=5, window_seconds=60
+        )

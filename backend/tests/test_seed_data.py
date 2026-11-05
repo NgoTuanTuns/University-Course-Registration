@@ -3,6 +3,7 @@
 Chạy:  cd backend && python -m pytest tests/test_seed_data.py
 (nếu báo không import được `app`, thêm `pythonpath = .` vào pytest.ini / pyproject.toml)
 """
+
 import math
 
 import pytest
@@ -57,7 +58,9 @@ def _missing(ds: Dataset, email: str, target: str):
 
 def _overlap(a: list[dict], b: list[dict]) -> bool:
     return any(
-        x["day"] == y["day"] and _to_min(x["start"]) < _to_min(y["end"]) and _to_min(y["start"]) < _to_min(x["end"])
+        x["day"] == y["day"]
+        and _to_min(x["start"]) < _to_min(y["end"])
+        and _to_min(y["start"]) < _to_min(x["end"])
         for x in a
         for y in b
     )
@@ -71,7 +74,9 @@ def test_dataset_valid(profile):
 
 def test_deterministic():
     a, b = build_dataset("default"), build_dataset("default")
-    assert a.courses == b.courses and a.prereqs == b.prereqs and a.offerings == b.offerings
+    assert (
+        a.courses == b.courses and a.prereqs == b.prereqs and a.offerings == b.offerings
+    )
     assert a.students == b.students and a.completed == b.completed
 
 
@@ -92,7 +97,9 @@ def test_dag_depth_at_least_seven(default):
     def d(code: str) -> int:
         if code in depth:
             return depth[code]
-        parents = list(and_map.get(code, [])) + [o for opts in or_map.get(code, {}).values() for o in opts]
+        parents = list(and_map.get(code, [])) + [
+            o for opts in or_map.get(code, {}).values() for o in opts
+        ]
         depth[code] = 1 + max((d(p) for p in parents), default=0)
         return depth[code]
 
@@ -123,12 +130,18 @@ def test_kit_chain_and_or_structure(minimal):
 
 def test_sv0001_eligible_for_int341(minimal):
     and_map, or_map = _requirements(minimal.prereqs)
-    assert satisfies("INT341", _completed(minimal, "sv0001@uni.edu.vn"), and_map, or_map)
+    assert satisfies(
+        "INT341", _completed(minimal, "sv0001@uni.edu.vn"), and_map, or_map
+    )
 
 
 def test_sv0002_missing_transitive_for_int431(minimal):
     missing, _ = _missing(minimal, "sv0002@uni.edu.vn", "INT431")
-    assert missing == ["INT331", "INT231", "INT131"]  # chuỗi bắc cầu, theo độ sâu tăng dần
+    assert missing == [
+        "INT331",
+        "INT231",
+        "INT131",
+    ]  # chuỗi bắc cầu, theo độ sâu tăng dần
 
 
 def test_sv0002_int231_missing_only_int131(minimal):
@@ -144,7 +157,9 @@ def test_sv0003_unmet_or_group_int341(minimal):
 def test_sv0009_sv0010_eligible_for_one_seat_class(minimal):
     and_map, or_map = _requirements(minimal.prereqs)
     for n in (9, 10):
-        assert satisfies("INT341", _completed(minimal, f"sv{n:04d}@uni.edu.vn"), and_map, or_map)
+        assert satisfies(
+            "INT341", _completed(minimal, f"sv{n:04d}@uni.edu.vn"), and_map, or_map
+        )
     assert minimal.offering("INT341").capacity == 1
     assert minimal.offering("INT341").enrolled_count == 0
 
@@ -159,27 +174,46 @@ def test_kit_class_states(minimal):
 
 
 def test_waitlist_of_full_class(minimal):
-    rows = sorted((w for w in minimal.waitlist if w.offering_key == ("INT331", "01")), key=lambda w: w.position)
-    assert [w.student_email for w in rows] == [f"sv{n:04d}@uni.edu.vn" for n in (6, 7, 8)]
+    rows = sorted(
+        (w for w in minimal.waitlist if w.offering_key == ("INT331", "01")),
+        key=lambda w: w.position,
+    )
+    assert [w.student_email for w in rows] == [
+        f"sv{n:04d}@uni.edu.vn" for n in (6, 7, 8)
+    ]
     assert [w.position for w in rows] == [1, 2, 3]
     assert len(rows) == math.ceil(15 * 0.2)
 
 
 def test_sv0004_has_24_credits_and_will_hit_credit_limit_not_conflict(minimal):
     credits = {c.code: c.credits for c in minimal.courses}
-    offs = [minimal.offering(*e.offering_key) for e in minimal.enrollments if e.student_email == "sv0004@uni.edu.vn"]
+    offs = [
+        minimal.offering(*e.offering_key)
+        for e in minimal.enrollments
+        if e.student_email == "sv0004@uni.edu.vn"
+    ]
     assert sum(credits[o.course_code] for o in offs) == 24
     target = minimal.offering("INT221")  # sv0004 đã học INT131 nên đủ tiên quyết
     assert credits["INT221"] == 3  # 24 + 3 > 25
-    assert not any(_overlap(target.schedule, o.schedule) for o in offs)  # lỗi phải là CREDIT_LIMIT, không phải SCHEDULE_CONFLICT
+    assert not any(
+        _overlap(target.schedule, o.schedule) for o in offs
+    )  # lỗi phải là CREDIT_LIMIT, không phải SCHEDULE_CONFLICT
 
 
 def test_conflict_and_adjacent_classes(minimal):
-    i221, i222, m201 = (minimal.offering(c).schedule for c in ("INT221", "INT222", "MAT201"))
+    i221, i222, m201 = (
+        minimal.offering(c).schedule for c in ("INT221", "INT222", "MAT201")
+    )
     assert _overlap(i221, i222)  # trùng thật sự
-    assert not _overlap(i221, m201)  # liền kề (kết thúc 09:30 = bắt đầu 09:30) KHÔNG trùng
+    assert not _overlap(
+        i221, m201
+    )  # liền kề (kết thúc 09:30 = bắt đầu 09:30) KHÔNG trùng
     assert _overlap(i222, m201)
-    sv5 = [e.offering_key for e in minimal.enrollments if e.student_email == "sv0005@uni.edu.vn"]
+    sv5 = [
+        e.offering_key
+        for e in minimal.enrollments
+        if e.student_email == "sv0005@uni.edu.vn"
+    ]
     assert sv5 == [("INT221", "01")]
 
 
@@ -195,7 +229,12 @@ def test_all_schedules_inside_grid_hours(default):
     for o in default.offerings:
         for s in o.schedule:
             assert 1 <= s["day"] <= 7
-            assert _to_min("07:00") <= _to_min(s["start"]) < _to_min(s["end"]) <= _to_min("21:00")
+            assert (
+                _to_min("07:00")
+                <= _to_min(s["start"])
+                < _to_min(s["end"])
+                <= _to_min("21:00")
+            )
 
 
 def test_term_is_current(default):
