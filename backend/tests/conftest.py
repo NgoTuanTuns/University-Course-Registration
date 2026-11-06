@@ -1,4 +1,11 @@
-"""Shared fixtures for backend integration and concurrency tests."""
+"""Shared fixtures for backend integration and concurrency tests.
+
+Chú ý (M4):
+- Khi chạy integration test đầy đủ: cần PostgreSQL + Redis đang chạy, và
+  TEST_DATABASE_URL phải trỏ tới database course_reg_test.
+- Khi chỉ chạy unit test thuần (mock): đặt UNIT_TESTS_ONLY=1 để bỏ qua
+  guard database và migration. Các fixture phụ thuộc DB sẽ không dùng được.
+"""
 
 from __future__ import annotations
 
@@ -13,13 +20,27 @@ import pytest
 backend_root = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(backend_root))
 
+# Guard đảm bảo test không chạy trên DB production.
+# Cho phép bỏ qua khi UNIT_TESTS_ONLY=1 (chạy unit test thuần dùng mock).
+_unit_tests_only = os.environ.get("UNIT_TESTS_ONLY", "0").lower() in (
+    "1",
+    "true",
+    "yes",
+)
 test_database_url = os.environ.get("TEST_DATABASE_URL", "")
-if urlparse(test_database_url).path.lstrip("/") != "course_reg_test":
-    raise RuntimeError("Tests must use the isolated course_reg_test database")
+
+if not _unit_tests_only:
+    if urlparse(test_database_url).path.lstrip("/") != "course_reg_test":
+        raise RuntimeError(
+            "Tests must use the isolated course_reg_test database.\n"
+            "  Đặt TEST_DATABASE_URL=postgresql+asyncpg://.../course_reg_test trong .env,\n"
+            "  hoặc UNIT_TESTS_ONLY=1 nếu chỉ chạy unit test thuần (không cần DB)."
+        )
 
 os.environ["APP_ENV"] = "test"
-os.environ["DATABASE_URL"] = test_database_url
-os.environ["ALEMBIC_DATABASE_URL"] = test_database_url
+if test_database_url:
+    os.environ["DATABASE_URL"] = test_database_url
+    os.environ["ALEMBIC_DATABASE_URL"] = test_database_url
 os.environ["REDIS_URL"] = os.environ.get(
     "TEST_REDIS_URL",
     "redis://redis:6379/1",
@@ -48,7 +69,12 @@ from app.models import (  # noqa: E402
 
 
 def pytest_sessionstart(session: pytest.Session) -> None:
+    """Chạy Alembic migration lên head trước khi bắt đầu test.
+    Bỏ qua khi UNIT_TESTS_ONLY=1 vì không có DB thực.
+    """
     del session
+    if _unit_tests_only:
+        return
     config = Config(str(backend_root / "alembic.ini"))
     config.set_main_option("script_location", str(backend_root / "alembic"))
     command.upgrade(config, "head")
