@@ -67,6 +67,9 @@ jobs:
       - name: Check migration/model agreement
         working-directory: backend
         run: alembic check
+      - name: OpenAPI contract snapshot
+        working-directory: backend
+        run: python -m app.tools.openapi_snapshot --check
       - name: Pytest
         working-directory: backend
         run: pytest
