@@ -33,7 +33,9 @@ class Waitlist(Base):
     )
 
     __table_args__ = (
-        UniqueConstraint("student_id", "offering_id", name="uq_waitlist_student_offering"),
+        UniqueConstraint(
+            "student_id", "offering_id", name="uq_waitlist_student_offering"
+        ),
         CheckConstraint("position > 0", name="ck_waitlist_position"),
         Index("ix_waitlist_queue", "offering_id", "enqueued_at", "id"),
     )

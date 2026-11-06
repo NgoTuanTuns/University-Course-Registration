@@ -18,4 +18,6 @@ class CompletedCourse(Base):
     grade: Mapped[Decimal | None] = mapped_column(Numeric(3, 1))
     term: Mapped[str | None] = mapped_column(String(10))
 
-    __table_args__ = (CheckConstraint("grade BETWEEN 0 AND 10", name="ck_completed_grade"),)
+    __table_args__ = (
+        CheckConstraint("grade BETWEEN 0 AND 10", name="ck_completed_grade"),
+    )

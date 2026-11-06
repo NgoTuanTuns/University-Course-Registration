@@ -63,10 +63,10 @@ APP_ENV=dev
 CORS_ORIGINS=http://localhost:5173,http://localhost:8080
 
 POSTGRES_USER=course_user
-POSTGRES_PASSWORD=doi_mat_khau_nay
+POSTGRES_PASSWORD=example
 POSTGRES_DB=course_reg
-DATABASE_URL=postgresql+asyncpg://course_user:doi_mat_khau_nay@db:5432/course_reg
-TEST_DATABASE_URL=postgresql+asyncpg://course_user:doi_mat_khau_nay@db:5432/course_reg_test
+DATABASE_URL=postgresql+asyncpg://course_user:example@db:5432/course_reg
+TEST_DATABASE_URL=postgresql+asyncpg://course_user:example@db:5432/course_reg_test
 
 REDIS_URL=redis://redis:6379/0
 

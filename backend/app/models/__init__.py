@@ -1,4 +1,5 @@
 """Import đủ 7 model để Alembic thấy hết metadata (alembic/env.py: `from app.models import Base`)."""
+
 from app.models.base import Base
 from app.models.completed_course import CompletedCourse
 from app.models.course import Course

@@ -14,19 +14,21 @@ Nếu endpoint cần biết là ai:  user: CurrentUser = Depends(get_current_use
 Token trong test: xem tests/auth_helpers.py (auth_headers).
 Lưu ý: vai trò và email lấy từ token (hết hạn sau ACCESS_TOKEN_TTL_MIN phút), không tra lại DB mỗi request.
 """
+
 from dataclasses import dataclass
-from typing import Literal
+from typing import Annotated, Literal
 
 import bcrypt
-from fastapi import Depends, Header, HTTPException
+from fastapi import Depends, Header
 from starlette.concurrency import run_in_threadpool
 
 from app.core import tokens
 from app.core.errors import api_error
 
-
 Role = Literal["student", "admin"]
-BCRYPT_ROUNDS = 12  # độ chậm cố ý của bcrypt (tham số thuật toán, không phải cấu hình triển khai)
+BCRYPT_ROUNDS = (
+    12  # độ chậm cố ý của bcrypt (tham số thuật toán, không phải cấu hình triển khai)
+)
 
 
 @dataclass(frozen=True)
@@ -36,7 +38,9 @@ class CurrentUser:
     email: str
 
 
-async def get_current_user(authorization: str | None = Header(default=None)) -> CurrentUser:
+async def get_current_user(
+    authorization: str | None = Header(default=None),
+) -> CurrentUser:
     """Trả người dùng hiện tại từ access token, hoặc ném 401."""
     if not authorization:
         raise api_error(401, "UNAUTHENTICATED", "Vui lòng đăng nhập")
@@ -46,18 +50,22 @@ async def get_current_user(authorization: str | None = Header(default=None)) -> 
     try:
         claims = tokens.decode_token(token.strip(), expected_type=tokens.ACCESS)
     except tokens.TokenExpiredError:
-        raise api_error(401, "TOKEN_EXPIRED", "Phiên đăng nhập đã hết hạn")
+        raise api_error(401, "TOKEN_EXPIRED", "Phiên đăng nhập đã hết hạn") from None
     except tokens.InvalidTokenError:
-        raise api_error(401, "UNAUTHENTICATED", "Vui lòng đăng nhập")
+        raise api_error(401, "UNAUTHENTICATED", "Vui lòng đăng nhập") from None
     return CurrentUser(id=claims.user_id, role=claims.role, email=claims.email)
 
 
 def require_role(role: Role):
     """Dependency factory: `Depends(require_role("admin"))`. Sai quyền -> 403 FORBIDDEN."""
 
-    async def checker(user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
+    async def checker(
+        user: Annotated[CurrentUser, Depends(get_current_user)],
+    ) -> CurrentUser:
         if user.role != role:
-            raise api_error(403, "FORBIDDEN", "Bạn không có quyền thực hiện thao tác này")
+            raise api_error(
+                403, "FORBIDDEN", "Bạn không có quyền thực hiện thao tác này"
+            )
         return user
 
     return checker
@@ -65,7 +73,9 @@ def require_role(role: Role):
 
 def hash_password(plain: str) -> str:
     """Băm bcrypt (chậm có chủ đích)."""
-    return bcrypt.hashpw(plain.encode("utf-8"), bcrypt.gensalt(rounds=BCRYPT_ROUNDS)).decode("utf-8")
+    return bcrypt.hashpw(
+        plain.encode("utf-8"), bcrypt.gensalt(rounds=BCRYPT_ROUNDS)
+    ).decode("utf-8")
 
 
 async def verify_password(plain: str, hashed: str) -> bool:

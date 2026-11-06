@@ -7,7 +7,9 @@ Các trường hợp:
 4. Đăng xuất: thu hồi refresh token -> không dùng để refresh được nữa.
 5. Sự cố Redis: từ chối refresh an toàn, không gây crash ứng dụng.
 """
+
 from unittest.mock import AsyncMock, patch
+
 import pytest
 from fastapi import HTTPException
 
@@ -130,7 +132,9 @@ async def test_refresh_token_reuse_detection_in_api():
 
 @pytest.mark.asyncio
 async def test_redis_failure_fails_safe():
-    with patch("app.core.redis.get_redis", side_effect=Exception("Redis connection error")):
+    with patch(
+        "app.core.redis.get_redis", side_effect=Exception("Redis connection error")
+    ):
         # Gặp sự cố kết nối: trả về False, không gây unhandled exception
         consumed = await consume_refresh_token(1, "jti-any")
         assert consumed is False

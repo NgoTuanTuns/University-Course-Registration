@@ -6,11 +6,14 @@ Quy ước chung của nhóm:
 - /auth/logout: Thu hồi refresh token khỏi Redis.
 - Dạng phản hồi: schemas/auth.py.
 """
+
 import logging
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core import rate_limit, tokens
+from app.core import tokens
 from app.core.db import get_session
 from app.core.errors import api_error
 from app.core.rate_limit import check_rate_limit, get_client_ip
@@ -21,7 +24,13 @@ from app.core.redis import (
     store_refresh_token,
 )
 from app.models import Student
-from app.schemas.auth import LoginRequest, MessageResponse, RefreshRequest, TokenResponse, UserOut
+from app.schemas.auth import (
+    LoginRequest,
+    MessageResponse,
+    RefreshRequest,
+    TokenResponse,
+    UserOut,
+)
 from app.services.auth_service import authenticate, get_user
 
 logger = logging.getLogger(__name__)
@@ -57,12 +66,14 @@ async def _issue_token_response(user: Student) -> TokenResponse:
 async def login(
     request: Request,
     body: LoginRequest,
-    session: AsyncSession = Depends(get_session),
+    session: Annotated[AsyncSession, Depends(get_session)],
 ) -> TokenResponse:
     # Rate limit: chống dò mật khẩu theo (IP, email)
     client_ip = get_client_ip(request)
     limit_id = f"{client_ip}:{body.email.strip().lower()}"
-    await check_rate_limit(scope="login", identifier=limit_id, limit=5, window_seconds=60)
+    await check_rate_limit(
+        scope="login", identifier=limit_id, limit=5, window_seconds=60
+    )
 
     user = await authenticate(session, body.email, body.password)
     if user is None:
@@ -74,14 +85,16 @@ async def login(
 @router.post("/refresh", response_model=TokenResponse)
 async def refresh(
     body: RefreshRequest,
-    session: AsyncSession = Depends(get_session),
+    session: Annotated[AsyncSession, Depends(get_session)],
 ) -> TokenResponse:
-    expired_err = api_error(401, "UNAUTHENTICATED", "Phiên đăng nhập đã hết hạn hoặc không hợp lệ")
+    expired_err = api_error(
+        401, "UNAUTHENTICATED", "Phiên đăng nhập đã hết hạn hoặc không hợp lệ"
+    )
 
     try:
         claims = tokens.decode_token(body.refresh_token, expected_type=tokens.REFRESH)
     except (tokens.TokenExpiredError, tokens.InvalidTokenError):
-        raise expired_err
+        raise expired_err from None
 
     # Cơ chế xoay vòng & phát hiện dùng lại (Token Reuse Detection)
     valid_use = await consume_refresh_token(claims.user_id, claims.jti)

@@ -7,11 +7,11 @@ Quy ước chung của nhóm (QUY_UOC_DU_AN.md, Mục 7 và kế hoạch M4 Mụ
 - Khi APP_ENV=loadtest hoặc RATE_LIMIT_ENABLED=false: tự động bỏ qua để phục vụ kiểm thử tải.
 - Khi Redis gặp sự cố: cho qua và ghi log cảnh báo (ưu tiên tính khả dụng).
 """
+
 from __future__ import annotations
 
 import logging
 import os
-from typing import Tuple
 
 from fastapi import HTTPException, Request
 
@@ -55,7 +55,9 @@ def is_rate_limit_disabled() -> bool:
 
 def get_client_ip(request: Request) -> str:
     """Lấy IP của client, ưu tiên header do Nginx của dự án chuyển tiếp."""
-    forwarded = request.headers.get("X-Forwarded-For") or request.headers.get("x-forwarded-for")
+    forwarded = request.headers.get("X-Forwarded-For") or request.headers.get(
+        "x-forwarded-for"
+    )
     if forwarded:
         # Lấy IP đầu tiên trong chuỗi
         return forwarded.split(",")[0].strip()
