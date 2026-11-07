@@ -23,6 +23,8 @@ from app.core.redis import (
 )
 from app.schemas.auth import RefreshRequest
 
+pytestmark = pytest.mark.unit
+
 
 class FakeRedis:
     """Mock Redis in-memory phục vụ unit test."""

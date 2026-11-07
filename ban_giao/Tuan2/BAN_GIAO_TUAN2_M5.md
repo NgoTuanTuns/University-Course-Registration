@@ -2,10 +2,10 @@
 
 **Dự án:** Hệ thống Đăng ký Học phần & Kiểm tra Điều kiện Tiên quyết
 
-**Người bàn giao:** M5  |  **Ngày cập nhật:** 06/11/2026  |  **Căn cứ:** `chitietcongviec/M5_cong_viec_7_tuan.md` và `chitietcongviec/QUY_UOC_DU_AN.md`
-**Nhánh:** `trung-devops-compose-ci`  |  **PR:** PR Tuần 2 mới, đang chờ M4 review
+**Người bàn giao:** M5  |  **Ngày cập nhật:** 07/11/2026  |  **Căn cứ:** `chitietcongviec/M5_cong_viec_7_tuan.md` và `chitietcongviec/QUY_UOC_DU_AN.md`
+**Nhánh:** `trung-devops-compose-ci`  |  **PR:** #4 — M4 đã merge vào `main` ngày 07/11/2026
 
-> **Trạng thái chung: ĐANG LÀM — các test cục bộ và snapshot hiện tại đã đạt; chưa hoàn tất Tuần 2.** PR đã tách riêng commit tuần 2, không đưa lại các thay đổi tuần 1 vào diff. CI trên GitHub của PR mới chưa xác nhận. Locust đầy đủ và pairing review nghiệm thu còn phụ thuộc M2/M3/M4.
+> **Trạng thái chung: ĐANG LÀM — các test cục bộ và snapshot hiện tại đã đạt; chưa hoàn tất Tuần 2.** PR đã tách riêng commit tuần 2, không đưa lại các thay đổi tuần 1 vào diff. CI và GitGuardian của PR #4 đã qua; GitGuardian quét 2 commit và không phát hiện secret. Locust đầy đủ và pairing review nghiệm thu còn phụ thuộc M2/M3/M4.
 
 ---
 
@@ -19,7 +19,7 @@ Tuần 2 thiết lập kế hoạch kiểm thử, bộ kiểm tra bất biến, 
 4. Thêm công cụ sinh/so sánh OpenAPI và snapshot cho các endpoint hiện có; CI có bước kiểm tra snapshot.
 5. Xác nhận cục bộ: `docker compose config -q`; API container khởi động; OpenAPI snapshot khớp; Ruff format/check đạt; **87 backend tests passed**.
 
-**Chưa hoàn tất:** CI/GitGuardian trên PR mới; M2 rà chéo bộ nghiệm thu (đặc biệt #6/D04 và #16); Locust chạy được với tài khoản/luồng thật; buổi review vòng 1 và quyết định đủ hơn nửa D01–D29.
+**Chưa hoàn tất:** M2 rà chéo bộ nghiệm thu (đặc biệt #6/D04 và #16); Locust chạy được với tài khoản/luồng thật; buổi review vòng 1 và quyết định đủ hơn nửa D01–D29.
 
 ---
 
@@ -47,9 +47,9 @@ Tuần 2 thiết lập kế hoạch kiểm thử, bộ kiểm tra bất biến, 
 | `docker compose exec api ruff format --check app tests` | 42 files already formatted | [x] |
 | `docker compose exec api ruff check app tests` | All checks passed | [x] |
 | `docker compose exec api pytest -q` | 87 passed | [x] |
-| GitHub Actions của PR Tuần 2 | Chưa xác nhận trong tài liệu này | [ ] |
+| GitHub Actions của PR Tuần 2 | PR #4: các check đã qua theo xác nhận và ảnh PR | [x] |
+| GitGuardian PR #4 | 2 commit được quét; không phát hiện secret | [x] |
 
----
 
 ## 4. Nghiệm thu tiên quyết và phối hợp M2
 
@@ -68,7 +68,7 @@ Tuần 2 thiết lập kế hoạch kiểm thử, bộ kiểm tra bất biến, 
 - Snapshot hiện khớp mã ứng dụng trong Compose và CI có bước so sánh.
 - Snapshot chỉ đại diện các endpoint hiện có; chưa bao gồm luồng M3 `/courses`, `/enroll`, `/timetable`, `/waitlist`.
 - Khi M1/M3 hoàn tất và nhóm chốt D01–D07/D13/D15, cập nhật snapshot cùng PR thay đổi hợp đồng; thông báo M1 theo quy ước.
-- [ ] Xác nhận gate OpenAPI xanh trên GitHub Actions của PR mới.
+- [x] Gate OpenAPI xanh trên GitHub Actions của PR #4.
 
 ### 5.2 Locust
 
@@ -83,19 +83,18 @@ Tuần 2 thiết lập kế hoạch kiểm thử, bộ kiểm tra bất biến, 
 
 | Hạng mục | Trạng thái | Rủi ro/việc tiếp theo |
 |---|---|---|
-| CI + OpenAPI gate | Chờ PR mới chạy GitHub Actions | Nếu fail, đọc đúng job/log; không bỏ gate để làm xanh |
+| CI + OpenAPI gate | PR #4 checks đã qua | GitGuardian không phát hiện secret; OpenAPI gate xanh |
 | M2 nghiệm thu | Pairing review chưa xong | Không chốt D04 hoặc cách hiểu #16 thay M2 |
 | M3 API đăng ký/thời khóa biểu | Chưa có trong main được rà | Snapshot cuối và Locust đầy đủ đang chờ contract |
 | M4 account file/seed tải nhỏ | Chưa bàn giao cho Locust | Không dùng chung tài khoản hoặc tài khoản ghi cứng |
 | D01–D29 | Cần nhóm xem và ghi quyết định | Hơn một nửa cần được chốt trước review cuối tuần 2; M5 không tự quyết thay nhóm |
-| M4 review PR M5 | Đang chờ | Chỉ sửa theo review; chưa merge vào `main` |
+| M4 review PR M5 | PR #4 đã được M4 merge vào `main` | Đã xong; tiếp tục công việc Tuần 3 trên nhánh M5 |
 
 ---
 
 ## 7. Việc tiếp theo
 
-1. Đợi GitHub Actions/GitGuardian của PR mới; xử lý lỗi theo log nếu có.
-2. Nhận và xử lý review M4; giữ PR chờ duyệt, không merge vào `main`.
-3. Pairing review 21+5 ca với M2; xác nhận D04 và phần `can_take_now` của case #16.
-4. Khi M3/M4 bàn giao contract và tài khoản, hoàn thiện Locust draft và chạy trên seed nhỏ.
-5. Chuẩn bị review vòng 1: trạng thái từng thành viên, rủi ro, D01–D29 còn mở, người chốt và hạn.
+1. PR #4 đã được M4 merge vào `main`; giữ các thay đổi Tuần 3 trên nhánh M5.
+2. Pairing review 21+5 ca với M2; xác nhận D04 và phần `can_take_now` của case #16.
+3. Khi M3/M4 bàn giao contract và tài khoản, hoàn thiện Locust draft và chạy trên seed nhỏ.
+4. Chuẩn bị review vòng 1: trạng thái từng thành viên, rủi ro, D01–D29 còn mở, người chốt và hạn.

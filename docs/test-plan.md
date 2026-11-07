@@ -1,6 +1,6 @@
 # Kế hoạch kiểm thử — Tuần coding 2 (M5)
 
-**Trạng thái:** Bản kế hoạch v1; chưa có bộ bất biến, snapshot OpenAPI hoặc Locust trong repo.
+**Trạng thái:** Đã có bộ invariant và OpenAPI snapshot cùng CI gate; Locust chưa triển khai vì đang chờ API M3 và tài khoản/seed M4.
 
 **Ngày:** 2026-11-06
 **Căn cứ:** `chitietcongviec/M5_cong_viec_7_tuan.md`, `chitietcongviec/QUY_UOC_DU_AN.md`, bảng ca M2 và nhật ký `docs/decisions.md`.
