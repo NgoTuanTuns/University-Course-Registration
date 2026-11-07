@@ -2,25 +2,25 @@
 
 **Dự án:** Hệ thống Đăng ký Học phần & Kiểm tra Điều kiện Tiên quyết<br>
 **Người phụ trách:** M5  |  **Ngày bắt đầu:** 06/11/2026  |  **Căn cứ:** `chitietcongviec/M5_cong_viec_7_tuan.md`, `chitietcongviec/QUY_UOC_DU_AN.md`<br>
-**Nhánh:** `trung-devops-compose-ci`  |  **PR:** cập nhật sau khi bắt đầu thay đổi Tuần 3
+**Nhánh:** `trung-devops-compose-ci`  |  **PR:** #5
 
-> **Trạng thái: ĐANG THỰC HIỆN — đã phân loại marker, điều chỉnh cấu hình deprecation và cập nhật workflow CI trong working tree.** Các thay đổi cần chạy lại cục bộ và được GitHub Actions xác nhận sau khi push. Auth matrix, MSW, tải và E2E còn phụ thuộc contract/API M1–M3, seed/tài khoản M4 và quyết định D22/D23; không tạo endpoint, tài khoản hay quy tắc nghiệp vụ giả định.
+> **Trạng thái: ĐANG THỰC HIỆN — marker và workflow đã cập nhật; PR #5 có CI xanh ở push và pull request, GitGuardian không phát hiện bí mật.** Frontend job bị bỏ qua vì repo chưa có package frontend. Ma trận quyền cuối, MSW, tải và E2E còn phụ thuộc contract/API M1–M3, bảng quyền/seed M4 và quyết định D22/D23; không tự đặt quy tắc nghiệp vụ.
 
 ---
 
 ## 1. Hiện trạng trước khi code
 
-- CI có PostgreSQL/Redis, tạo `course_reg_test`, chạy migration/check model và kiểm tra OpenAPI. Working copy hiện thêm marker guard, chạy pytest unit và integration/concurrency; giữ job ID/name `backend` và các service DB/Redis. Workflow mới chưa được xác nhận trên GitHub Actions.
+- CI có PostgreSQL/Redis, tạo `course_reg_test`, chạy migration/check model và kiểm tra OpenAPI. Workflow phân loại unit và integration/concurrency, có marker guard; giữ job ID/name `backend` và các service DB/Redis. PR #5 đã xanh ở cả `push` và `pull_request`.
 - `pytest` có cấu hình marker `unit`, `integration`, `concurrency`, `stress`, `slow`, `e2e`. Đã rà soát và gắn `unit` cho các suite thuần/mock: admin courses, rate limit, refresh rotation, models metadata, prerequisite engine và seed data. Acceptance API và phần đọc DB của invariant được gắn `integration`.
 - Chưa có test tranh chấp `concurrency`. Workflow working copy chạy cả `unit` và `integration or concurrency` trong cùng job; marker guard phải thất bại khi còn test chưa phân loại. Giữ nguyên tên job/check hiện tại để giảm rủi ro branch protection.
 - Người dùng đã chạy collection: `unit` thu 85/87 test, `integration` thu 2/87, bộ lọc không thuộc ba marker thu 0 test (87 deselected). Như vậy hiện không còn test chưa phân loại; chưa có concurrency tests.
-- `origin/main` có commit M4 `9b52e72` bổ sung `UNIT_TESTS_ONLY=1` trong `conftest.py` để bỏ qua DB guard/Alembic cho unit thuần. Working copy đã nhận đúng nội dung M4; workflow chỉ bật cờ cho collection guard và unit tests, không bật cho integration. Cần chạy lại unit command với cờ này để kiểm chứng.
+- `origin/main` có commit M4 `9b52e72` bổ sung `UNIT_TESTS_ONLY=1` trong `conftest.py` để bỏ qua DB guard/Alembic cho unit thuần. Workflow chỉ bật cờ cho collection guard và unit tests, không bật cho integration. Unit/integration tests và Ruff đã qua tại máy người dùng.
 - Collection trước khi sửa cấu hình báo hai deprecation warning. Đã khai báo fixture loop scope `function`, `path_separator = os` và nâng minimum versions lên pytest 8.2, pytest-asyncio 0.24, Alembic 1.16; cần rebuild image và chạy lại để xác nhận warning đã hết.
 - Repo hiện chưa có thư mục frontend và package manifest trong root; job frontend được detect/skipped. Chưa thể kiểm tra MSW của M1.
 - Bộ OpenAPI hiện là baseline của router đang có; các luồng course search, enrollment, timetable và waitlist cần xác nhận theo contract/API của M1–M3 trước khi sinh ma trận phân quyền cuối.
 - Locust/load profile cần DB riêng, Redis DB 2, tài khoản/seed M4 và API M3. Chưa tạo reset script để tránh xóa nhầm DB demo/test.
 - Playwright phụ thuộc quyết định D22 và frontend M1.
-- PR Tuần 2 #4 đã được M4 merge vào `main`; GitHub Actions/GitGuardian đều qua và GitGuardian không phát hiện secret. Các thay đổi Tuần 3 vẫn ở nhánh M5.
+- PR Tuần 2 #4 đã được M4 merge vào `main`. PR Tuần 3 #5 đang mở; GitHub Actions/GitGuardian đều qua.
 
 ## 2. Cổng rủi ro trước khi triển khai
 
@@ -48,18 +48,30 @@
 - [x] Chạy test riêng theo marker: `pytest -m unit` — 85 passed, 2 deselected; `pytest -m "integration or concurrency"` — 2 passed, 85 deselected.
 - [x] Xác nhận sau khi nhận `conftest.py` M4: unit với `UNIT_TESTS_ONLY=1` đạt 85 passed, 2 deselected; integration/concurrency không cờ đạt 2 passed, 85 deselected.
 - [x] Sau khi lấy `conftest.py` M4: Ruff lint `All checks passed`; format `42 files already formatted`.
-- [ ] Xác nhận collection sau khi rebuild không còn hai deprecation warning; xác nhận workflow mới xanh trên GitHub Actions sau khi push.
+- [ ] Chạy collection sau rebuild và xác nhận hai deprecation warning đã hết; lần kiểm tra này chưa thực hiện được do Docker Engine không truy cập được trong phiên Codex.
 - [ ] Sau khi M4 có seed nhỏ: thêm bước seed CI có thể lặp lại và chỉ chạy sau migration trên DB test cô lập.
 - [ ] Phối hợp M2/M3 kiểm tra hành vi khi Redis bị tắt; dùng job/fixture riêng, không làm ảnh hưởng job CI chuẩn.
-- [ ] Xác nhận check `backend` mới xanh trên GitHub Actions sau khi push; xử lý log nếu marker guard/test selection thất bại.
+- [x] Xác nhận check `backend` xanh trên GitHub Actions cho cả `push` và `pull_request`; GitGuardian không phát hiện secrets. Frontend lint/test/build được skip vì chưa có package frontend.
 - [ ] Thu số liệu thời gian và coverage `services/`; đề xuất ngưỡng sau baseline, không tự đặt số.
 
 ### 3.2 Ma trận phân quyền tự động
 
-- [ ] Sinh danh sách endpoint/method từ OpenAPI.
+- [x] Lập danh sách route hiện có từ mã router làm bản nháp; chưa gắn kỳ vọng quyền cuối vì M4 sở hữu ma trận phân quyền và cần xác nhận contract.
+- [ ] Sinh danh sách endpoint/method đầy đủ từ OpenAPI sau khi M1–M3 hoàn tất các router còn thiếu.
 - [ ] Khai báo kỳ vọng auth theo endpoint và role; xác nhận 401, 403, token hết hạn và admin được phép theo contract.
 - [ ] Thêm kiểm thử IDOR A/B sau khi M3/M4 xác nhận endpoint và ownership.
 - [ ] Endpoint mới phải được phát hiện tự động; endpoint chưa có expectation phải làm CI fail rõ ràng thay vì bị bỏ qua.
+
+#### Route inventory nháp — cần M4 xác nhận
+
+| Method/path hiện có | Hành vi xác thực thấy trong router | Phạm vi chưa kết luận |
+|---|---|---|
+| `GET /health` | Không có dependency bearer; kiểm tra DB và Redis | Xác nhận có cần giới hạn truy cập ở môi trường triển khai không |
+| `POST /api/v1/auth/login` | Không cần bearer; xác thực thông tin đăng nhập trong body | Kỳ vọng status/rate-limit phải khớp contract auth M4 |
+| `POST /api/v1/auth/refresh` | Không cần access bearer; nhận refresh token trong body | Cần kiểm tra các trường hợp expired, invalid, token reuse theo test M4 |
+| `POST /api/v1/auth/logout` | Không cần bearer; nhận refresh token trong body | Router luôn trả thông báo thành công kể cả token không giải mã được; xác nhận đây là chủ ý |
+| `GET/POST /api/v1/admin/courses`, `GET/PUT/DELETE /api/v1/admin/courses/{course_id}` | Router yêu cầu role `admin` | Kỳ vọng 401/403 và response admin thành công cần fixture/contract xác nhận |
+| `GET /api/v1/prerequisites/check` | Yêu cầu đăng nhập; student bị từ chối nếu truyền `student_id` khác ID mình; admin có thể chỉ định student khác | M4/M3 xác nhận IDOR/ownership và status code cuối |
 
 ### 3.3 Hợp đồng frontend/backend
 
@@ -111,3 +123,4 @@
 | 07/11/2026 | Tích hợp thay đổi M4 từ `origin/main` | Đã lấy `conftest.py` có cờ `UNIT_TESTS_ONLY`; workflow bật cờ riêng cho collection/unit | Cần chạy lại unit theo cờ và integration không cờ; `origin/main` đã fetch, nhưng workflow mới chưa lên GitHub |
 | 07/11/2026 | Kiểm tra lại với cờ M4 | Unit: 85 passed, 2 deselected (6.18s); integration/concurrency: 2 passed, 85 deselected | Cần xác nhận workflow CI mới trên GitHub sau khi push |
 | 07/11/2026 | Ruff sau khi nhận `conftest.py` M4 | `ruff check app tests`: All checks passed; `ruff format --check app tests`: 42 files already formatted | Workflow mới vẫn cần GitHub Actions xác nhận sau push |
+| 07/11/2026 | Kiểm tra PR #5 trên GitHub | CI `push` và `pull_request` đều xanh; GitGuardian scan 1 commit và không phát hiện secret; frontend job được skip | PR vẫn cần review M4; ma trận quyền cuối chờ M4 và API M1–M3 |
