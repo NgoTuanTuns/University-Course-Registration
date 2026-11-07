@@ -20,6 +20,8 @@ from app.core.rate_limit import (
     is_rate_limit_disabled,
 )
 
+pytestmark = pytest.mark.unit
+
 
 @pytest.mark.asyncio
 async def test_rate_limit_allowed():

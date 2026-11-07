@@ -20,6 +20,8 @@ from app.seed_data import (
     validate_dataset,
 )
 
+pytestmark = pytest.mark.unit
+
 
 @pytest.fixture(scope="module")
 def minimal() -> Dataset:

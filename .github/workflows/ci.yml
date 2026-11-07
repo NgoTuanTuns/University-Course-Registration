@@ -70,9 +70,31 @@ jobs:
       - name: OpenAPI contract snapshot
         working-directory: backend
         run: python -m app.tools.openapi_snapshot --check
-      - name: Pytest
+      - name: Check every test has an explicit marker
         working-directory: backend
-        run: pytest
+        env:
+          UNIT_TESTS_ONLY: "1"
+        run: |
+          set +e
+          pytest --collect-only -q -m "not unit and not integration and not concurrency and not stress and not slow and not e2e"
+          status=$?
+          set -e
+          if [ "$status" -eq 5 ]; then
+            echo "All collected tests have an explicit marker."
+          elif [ "$status" -eq 0 ]; then
+            echo "::error::Found tests without an explicit marker."
+            exit 1
+          else
+            exit "$status"
+          fi
+      - name: Unit tests
+        working-directory: backend
+        env:
+          UNIT_TESTS_ONLY: "1"
+        run: pytest -m unit
+      - name: Integration and concurrency tests
+        working-directory: backend
+        run: pytest -m "integration or concurrency"
 
   detect-frontend:
     name: Detect frontend package

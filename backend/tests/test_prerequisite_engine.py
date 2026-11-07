@@ -11,6 +11,8 @@ from app.services.prerequisite_engine import (
     would_create_cycle,
 )
 
+pytestmark = pytest.mark.unit
+
 EDGES = [
     ("B1", "A1", "AND", 0),
     ("B2", "A1", "AND", 0),
