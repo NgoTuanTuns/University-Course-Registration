@@ -18,6 +18,7 @@ from app.core.config import get_settings
 from app.core.db import get_session
 from app.core.errors import register_error_handlers
 from app.core.redis import close_redis, get_redis
+from app.services import prerequisite_engine
 
 settings = get_settings()
 logging.basicConfig(
@@ -28,8 +29,19 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+async def _warm_prerequisite_graph() -> None:
+    """Nạp sẵn DAG tiên quyết vào Redis để request đầu tiên không phải dựng lại.
+    Không bắt buộc: DB chưa migrate hoặc Redis tắt thì chỉ ghi cảnh báo."""
+    try:
+        async for session in get_session():
+            await prerequisite_engine.warm_graph_cache(session)
+    except Exception as exc:
+        logger.warning("Bỏ qua làm nóng cache tiên quyết: %s", exc)
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    await _warm_prerequisite_graph()
     yield
     await close_redis()
 

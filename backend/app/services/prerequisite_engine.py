@@ -1,266 +1,350 @@
-"""Engine kiểm tra điều kiện tiên quyết (M2 - Tuần 1).
+"""Engine kiểm tra điều kiện tiên quyết (M2) — điểm vào công khai cho cả nhóm.
 
-Thiết kế: lõi THUẦN (không đụng DB/Redis) để test độc lập (SR-NF-02).
-Phần truy cập DB nằm cuối file và import model theo kiểu lazy, nên lõi
-chạy/test được ngay cả khi models của M4 chưa có trên main.
+Chia thành 3 phần, file này chỉ ghép chúng lại:
+  prerequisite_core.py        lõi THUẦN (DAG, evaluate, explain, chu trình) - test độc lập
+  prerequisite_repository.py  đọc DB với số truy vấn cố định (không N+1)
+  prerequisite_cache.py       cache Redis + invalidation
 
-Mô hình: DAG, cạnh X -> Y nghĩa là "X cần Y".
-  - type 'AND' (group_no = 0): bắt buộc đã học Y.
-  - type 'OR'  (group_no >= 1): các dòng cùng (course, group_no) là 1 nhóm,
-    chỉ cần đã học 1 môn trong nhóm.
-Ngữ nghĩa bắc cầu (phương án a): môn nằm trong completed thì coi là đủ,
-không xét lại tổ tiên của nó. Môn CHƯA học thì mở rộng tiếp tiên quyết của
-nó để liệt kê đủ chuỗi cần học.
-Tất cả duyệt bằng vòng lặp/hàng đợi, không đệ quy (giới hạn ~1000 của Python).
+Dùng cho người khác:
+  M3 (/enroll):  await check_eligibility(session, student_id, course_id)
+                 -> EligibilityResult (missing_courses là MÃ MÔN). Chỉ đọc, dùng chung
+                 session của M3, không commit/rollback.
+  M4 (admin):    await ensure_edge_allowed(session, course_id, prereq_course_id)
+                 trước khi ghi cạnh; bắt PrerequisiteCycleError -> raise cycle_http_error(e).
+                 Sau commit: await invalidate_graph(). Seed/import: assert_acyclic(edges).
+                 completed_courses của một sinh viên đổi: await invalidate_student(id).
+
+Số truy vấn DB cho mỗi lần check (đo bằng test):
+  cache kết quả trúng                 -> 0
+  trượt, đồ thị đã có trong Redis     -> 1 (completed_courses)
+  trượt, đồ thị chưa có / Redis tắt   -> 3 (cạnh, danh mục môn, completed_courses)
+Không tăng theo kích cỡ DAG.
 """
 
 from __future__ import annotations
 
-from collections import deque
 from collections.abc import Iterable
-from dataclasses import dataclass, field, replace
 
-CourseId = int | str
+from fastapi import HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.errors import api_error
+from app.schemas.prerequisite import (
+    MissingCourseOut,
+    OrGroupExplainOut,
+    OrOptionOut,
+    PrerequisiteExplainResponse,
+)
+from app.services import prerequisite_cache as cache
+from app.services import prerequisite_repository as repo
+from app.services.prerequisite_cache import (
+    get_metrics,
+    invalidate_graph,
+    invalidate_student,
+)
+from app.services.prerequisite_core import (
+    KIND_DIRECT,
+    KIND_TRANSITIVE,
+    CourseId,
+    CourseNotFoundError,
+    EligibilityResult,
+    Explanation,
+    MissingCourse,
+    OrGroupExplanation,
+    OrGroupResult,
+    OrOption,
+    PrerequisiteCycleError,
+    PrerequisiteGraph,
+    assert_acyclic,
+    evaluate,
+    explain,
+    find_cycle,
+    suggested_order,
+    would_create_cycle,
+)
+from app.services.prerequisite_repository import (
+    CourseLabel,
+    GraphSnapshot,
+    load_completed,
+    load_course_codes,
+    load_edges,
+)
+
+__all__ = [
+    "KIND_DIRECT",
+    "KIND_TRANSITIVE",
+    "CourseId",
+    "CourseLabel",
+    "CourseNotFoundError",
+    "EligibilityResult",
+    "Explanation",
+    "GraphSnapshot",
+    "MissingCourse",
+    "OrGroupExplanation",
+    "OrGroupResult",
+    "OrOption",
+    "PrerequisiteCycleError",
+    "PrerequisiteGraph",
+    "assert_acyclic",
+    "check_eligibility",
+    "check_eligibility_many",
+    "cycle_http_error",
+    "ensure_edge_allowed",
+    "evaluate",
+    "explain",
+    "explain_eligibility",
+    "find_cycle",
+    "get_metrics",
+    "invalidate_graph",
+    "invalidate_student",
+    "load_completed",
+    "load_course_codes",
+    "load_edges",
+    "suggested_order",
+    "warm_graph_cache",
+    "would_create_cycle",
+]
 
 
-class PrerequisiteCycleError(Exception):
-    """Dữ liệu tiên quyết có vòng lặp. `path` là đường đi của chu trình."""
-
-    def __init__(self, path: list[CourseId]):
-        self.path = path
-        super().__init__(" -> ".join(str(p) for p in path))
-
-
-class CourseNotFoundError(Exception):
-    """Môn học không tồn tại."""
-
-
-@dataclass
-class PrerequisiteGraph:
-    and_prereqs: dict[CourseId, set[CourseId]] = field(default_factory=dict)
-    or_groups: dict[CourseId, dict[int, set[CourseId]]] = field(default_factory=dict)
-
-    @classmethod
-    def from_edges(
-        cls, edges: Iterable[tuple[CourseId, CourseId, str, int]]
-    ) -> PrerequisiteGraph:
-        """edges: (course_id, prereq_course_id, type, group_no)."""
-        g = cls()
-        for course, prereq, kind, group_no in edges:
-            if kind == "AND":
-                g.and_prereqs.setdefault(course, set()).add(prereq)
-            elif kind == "OR":
-                if group_no < 1:
-                    raise ValueError("Cạnh OR phải có group_no >= 1")
-                g.or_groups.setdefault(course, {}).setdefault(group_no, set()).add(
-                    prereq
-                )
-            else:
-                raise ValueError(f"type không hợp lệ: {kind!r}")
-        return g
-
-    def successors(self, course: CourseId) -> set[CourseId]:
-        """Mọi môn mà `course` cần (cả AND lẫn OR) - dùng cho phát hiện chu trình."""
-        out = set(self.and_prereqs.get(course, ()))
-        for members in self.or_groups.get(course, {}).values():
-            out |= members
-        return out
-
-    def nodes(self) -> set[CourseId]:
-        nodes: set[CourseId] = set(self.and_prereqs) | set(self.or_groups)
-        for c in list(nodes):
-            nodes |= self.successors(c)
-        return nodes
+# --------------------------------------------------------------------- đồ thị
+async def _load_and_cache_graph(
+    session: AsyncSession, generation: str
+) -> GraphSnapshot:
+    """Đồ thị chưa có trong Redis: chỉ MỘT request dựng lại (SET NX), các request
+    khác chờ ngắn rồi đọc lại -> tránh "cache stampede" khi khóa đồ thị vừa bị xóa."""
+    token = await cache.try_acquire_graph_lock()
+    if token is None:
+        waited = await cache.wait_for_graph()
+        if waited is not None:
+            return waited
+        snapshot = await repo.load_graph_snapshot(session)
+        await cache.store_graph(snapshot, generation)
+        return snapshot
+    try:
+        snapshot = await repo.load_graph_snapshot(session)
+        await cache.store_graph(snapshot, generation)
+        return snapshot
+    finally:
+        await cache.release_graph_lock(token)
 
 
-@dataclass
-class OrGroupResult:
-    group_no: int
-    options: list[CourseId]
+async def _graph_snapshot(
+    session: AsyncSession, generation: str | None
+) -> GraphSnapshot:
+    """generation=None nghĩa là không dùng cache (Redis lỗi hoặc gọi không cache)."""
+    if generation is None:
+        return await repo.load_graph_snapshot(session)
+    cached = await cache.read_graph()
+    if cached is not None:
+        return cached
+    return await _load_and_cache_graph(session, generation)
 
 
-@dataclass
-class EligibilityResult:
-    course_id: CourseId
-    eligible: bool
-    missing_courses: list[CourseId] = field(default_factory=list)
-    unmet_or_groups: list[OrGroupResult] = field(default_factory=list)
-    course_code: str | None = None
+async def warm_graph_cache(session: AsyncSession) -> bool:
+    """Làm nóng đồ thị khi khởi động (FastAPI lifespan). Trả True nếu đồ thị đã sẵn."""
+    generation = await cache.read_generation()
+    if generation is None:
+        return False
+    if await cache.read_graph() is not None:
+        return True
+    await _load_and_cache_graph(session, generation)
+    return True
 
 
-def evaluate(
-    graph: PrerequisiteGraph, course_id: CourseId, completed: set[CourseId]
+async def _labels_for(
+    session: AsyncSession, snapshot: GraphSnapshot, ids: Iterable[CourseId]
+) -> dict[int, CourseLabel]:
+    """Nhãn (mã, tên) cho các id; chỉ hỏi DB với id không có trong danh mục đã cache
+    (ví dụ môn vừa được tạo sau khi đồ thị được dựng)."""
+    wanted = {int(c) for c in ids}
+    labels = {c: snapshot.courses[c] for c in wanted if c in snapshot.courses}
+    unknown = wanted - labels.keys()
+    if unknown:
+        labels |= await repo.load_course_labels(session, unknown)
+    return labels
+
+
+# --------------------------------------------------------------------- check
+def _to_codes(
+    raw: EligibilityResult, labels: dict[int, CourseLabel]
 ) -> EligibilityResult:
-    """Hàm thuần: sinh viên có `completed` thì đủ điều kiện học `course_id` chưa."""
-    # Môn thiếu (AND) = BFS từ môn đích. `seen` là memoization: môn xuất hiện ở
-    # nhiều nhánh (hình kim cương) chỉ xử lý 1 lần -> O(V + E), không bùng nổ.
-    missing: list[CourseId] = []
-    seen: set[CourseId] = set()
-    queue: deque[CourseId] = deque()
-
-    def push_unmet(parent: CourseId) -> None:
-        # sorted(key=str) để kết quả xác định (test ổn định, UI không "nhảy")
-        for p in sorted(graph.and_prereqs.get(parent, ()), key=str):
-            if p not in completed and p not in seen:
-                queue.append(p)
-
-    push_unmet(course_id)
-    while queue:
-        cur = queue.popleft()
-        if cur in seen:
-            continue
-        seen.add(cur)
-        missing.append(cur)
-        # Môn chưa học -> tiên quyết của nó cũng phải học (bắc cầu).
-        # Môn đã học thì không đi tiếp (phương án a).
-        push_unmet(cur)
-
-    # Nhóm OR của môn đích: đạt khi có ÍT NHẤT 1 môn đã học.
-    # Nhóm chưa đạt đưa vào unmet_or_groups, KHÔNG gộp vào missing_courses.
-    unmet: list[OrGroupResult] = []
-    for group_no, members in sorted(graph.or_groups.get(course_id, {}).items()):
-        if not (members & completed):
-            unmet.append(OrGroupResult(group_no, sorted(members, key=str)))
+    def code(c: CourseId) -> str:
+        return labels[int(c)].code
 
     return EligibilityResult(
-        course_id=course_id,
-        eligible=not missing and not unmet,
-        missing_courses=missing,
-        unmet_or_groups=unmet,
+        course_id=raw.course_id,
+        course_code=code(raw.course_id),
+        eligible=raw.eligible,
+        missing_courses=[code(c) for c in raw.missing_courses],
+        unmet_or_groups=[
+            OrGroupResult(g.group_no, [code(o) for o in g.options])
+            for g in raw.unmet_or_groups
+        ],
     )
 
 
-def find_cycle(graph: PrerequisiteGraph) -> list[CourseId] | None:
-    """DFS 3 màu (vòng lặp). Trả đường đi chu trình [a, b, ..., a] hoặc None."""
-    WHITE, GRAY, BLACK = 0, 1, 2
-    color: dict[CourseId, int] = {}
-    for start in sorted(graph.nodes(), key=str):
-        if color.get(start, WHITE) != WHITE:
-            continue
-        color[start] = GRAY
-        path = [start]
-        stack = [iter(sorted(graph.successors(start), key=str))]
-        while stack:
-            nxt = next(stack[-1], None)
-            if nxt is None:  # hết con -> đóng node
-                color[path.pop()] = BLACK
-                stack.pop()
-                continue
-            state = color.get(nxt, WHITE)
-            if state == GRAY:  # gặp node đang trong đường đi hiện tại -> có vòng
-                return path[path.index(nxt) :] + [nxt]
-            if state == WHITE:
-                color[nxt] = GRAY
-                path.append(nxt)
-                stack.append(iter(sorted(graph.successors(nxt), key=str)))
-    return None
+def _ids_in(raw: EligibilityResult) -> set[CourseId]:
+    ids = {raw.course_id, *raw.missing_courses}
+    for g in raw.unmet_or_groups:
+        ids.update(g.options)
+    return ids
 
 
-def would_create_cycle(
-    graph: PrerequisiteGraph, course_id: CourseId, prereq_course_id: CourseId
-) -> list[CourseId] | None:
-    """Thêm cạnh 'course_id cần prereq_course_id' có tạo vòng không?
-
-    Có vòng khi course_id đã TỚI ĐƯỢC từ prereq_course_id theo chiều "cần".
-    Trả đường đi vòng [course, prereq, ..., course] hoặc None.
-    """
-    if course_id == prereq_course_id:
-        return [course_id, course_id]
-    parent: dict[CourseId, CourseId | None] = {prereq_course_id: None}
-    queue: deque[CourseId] = deque([prereq_course_id])
-    while queue:
-        cur = queue.popleft()
-        for nxt in sorted(graph.successors(cur), key=str):
-            if nxt in parent:
-                continue
-            parent[nxt] = cur
-            if nxt == course_id:
-                path = [nxt]
-                while parent[path[-1]] is not None:
-                    path.append(parent[path[-1]])  # type: ignore[arg-type]
-                path.reverse()  # prereq ... course
-                return [course_id] + path
-            queue.append(nxt)
-    return None
-
-
-def assert_acyclic(edges: Iterable[tuple[CourseId, CourseId, str, int]]) -> None:
-    """Dùng cho seed/import (M4): ném PrerequisiteCycleError nếu dữ liệu có vòng."""
-    cycle = find_cycle(PrerequisiteGraph.from_edges(edges))
-    if cycle:
-        raise PrerequisiteCycleError(cycle)
-
-
-# ----------------------------------------------------------------------------
-# Truy cập dữ liệu (mỏng). Import model lazy để lõi ở trên không phụ thuộc M4.
-# TODO(M4): đối chiếu tên model/cột với models/ thật.
-# ----------------------------------------------------------------------------
-async def load_edges(session) -> list[tuple[int, int, str, int]]:
-    from sqlalchemy import select
-
-    from app.models.prerequisite import Prerequisite
-
-    rows = await session.execute(
-        select(
-            Prerequisite.course_id,
-            Prerequisite.prereq_course_id,
-            Prerequisite.type,
-            Prerequisite.group_no,
-        )
+async def check_eligibility_many(
+    session: AsyncSession,
+    student_id: int,
+    course_ids: Iterable[int],
+    *,
+    use_cache: bool = True,
+) -> dict[int, EligibilityResult]:
+    """Kiểm tra nhiều môn cho MỘT sinh viên: một lần tra Redis (MGET trong Lua),
+    phần trượt dùng chung một đồ thị và một lần đọc completed_courses.
+    Môn không tồn tại không có trong kết quả."""
+    ids = [int(c) for c in dict.fromkeys(course_ids)]
+    lookup = (
+        await cache.read_results(student_id, ids)
+        if use_cache
+        else cache.CachedLookup(results={}, generation=None)
     )
-    return [tuple(r) for r in rows.all()]
+    pending = [c for c in ids if c not in lookup.results]
+    if not pending:
+        return {c: lookup.results[c] for c in ids}
 
+    snapshot = await _graph_snapshot(session, lookup.generation)
+    existing = await _labels_for(session, snapshot, pending)
+    pending = [c for c in pending if c in existing]
+    completed = await repo.load_completed(session, student_id)
 
-async def load_completed(session, student_id: int) -> set[int]:
-    from sqlalchemy import select
+    raws = [evaluate(snapshot.graph, c, completed) for c in pending]
+    needed = set().union(*(_ids_in(r) for r in raws)) if raws else set()
+    labels = existing | await _labels_for(session, snapshot, needed - existing.keys())
+    fresh = [_to_codes(r, labels) for r in raws]
+    await cache.store_results(student_id, fresh, lookup.generation)
 
-    from app.models.completed_course import CompletedCourse
-
-    rows = await session.execute(
-        select(CompletedCourse.course_id).where(
-            CompletedCourse.student_id == student_id
-        )
-    )
-    return {r[0] for r in rows.all()}
-
-
-async def load_course_codes(session, ids: set[int]) -> dict[int, str]:
-    from sqlalchemy import select
-
-    from app.models.course import Course
-
-    if not ids:
-        return {}
-    rows = await session.execute(
-        select(Course.id, Course.code).where(Course.id.in_(ids))
-    )
-    return {r[0]: r[1] for r in rows.all()}
+    merged = lookup.results | {int(r.course_id): r for r in fresh}
+    return {c: merged[c] for c in ids if c in merged}
 
 
 async def check_eligibility(
-    session, student_id: int, course_id: int
+    session: AsyncSession, student_id: int, course_id: int, *, use_cache: bool = True
 ) -> EligibilityResult:
     """Giao diện cho M3 gọi trong /enroll. CHỈ ĐỌC, dùng chung session của M3
-    (không commit/rollback). missing_courses là MÃ MÔN (vd "INT131")."""
-    graph = PrerequisiteGraph.from_edges(await load_edges(session))
-    completed = await load_completed(session, student_id)
-
-    codes = await load_course_codes(session, {course_id})
-    if course_id not in codes:
+    (không commit/rollback). missing_courses là MÃ MÔN (vd "INT131").
+    Môn không tồn tại -> CourseNotFoundError."""
+    results = await check_eligibility_many(
+        session, student_id, [course_id], use_cache=use_cache
+    )
+    if course_id not in results:
         raise CourseNotFoundError(f"Không tìm thấy môn id={course_id}")
+    return results[course_id]
 
-    raw = evaluate(graph, course_id, completed)
-    need = set(raw.missing_courses)
-    for grp in raw.unmet_or_groups:
-        need |= set(grp.options)
-    codes |= await load_course_codes(session, need)  # 1 truy vấn cho mọi mã cần dịch
 
-    return replace(
-        raw,
-        course_code=codes[course_id],
-        missing_courses=[codes[c] for c in raw.missing_courses],
-        unmet_or_groups=[
-            OrGroupResult(g.group_no, [codes[c] for c in g.options])
-            for g in raw.unmet_or_groups
+# --------------------------------------------------------------------- explain
+def _render_explanation(
+    exp: Explanation, labels: dict[int, CourseLabel]
+) -> PrerequisiteExplainResponse:
+    """Chỉ trả mã + tên môn, không lộ id nội bộ hay thuật ngữ đồ thị (UR-NF-02)."""
+
+    def code(c: CourseId) -> str:
+        return labels[int(c)].code
+
+    return PrerequisiteExplainResponse(
+        course_id=int(exp.course_id),
+        course_code=code(exp.course_id),
+        course_name=labels[int(exp.course_id)].name,
+        eligible=exp.eligible,
+        missing=[
+            MissingCourseOut(
+                course_code=code(m.course_id),
+                course_name=labels[int(m.course_id)].name,
+                kind=m.kind,
+                required_by=code(m.required_by),
+                path=[code(c) for c in m.path],
+            )
+            for m in exp.missing
         ],
+        unmet_or_groups=[
+            OrGroupExplainOut(
+                group_no=g.group_no,
+                required_by=code(g.required_by),
+                options=[
+                    OrOptionOut(
+                        course_code=code(o.course_id),
+                        course_name=labels[int(o.course_id)].name,
+                        can_take_now=o.can_take_now,
+                        missing_courses=[code(c) for c in o.missing_courses],
+                    )
+                    for o in g.options
+                ],
+            )
+            for g in exp.unmet_or_groups
+        ],
+        suggested_order=[code(c) for c in exp.suggested_order],
+        total_missing=exp.total_missing,
+        truncated=exp.truncated,
+    )
+
+
+def _ids_in_explanation(exp: Explanation) -> set[CourseId]:
+    ids: set[CourseId] = {exp.course_id, *exp.suggested_order}
+    for m in exp.missing:
+        ids.update(m.path)
+    for g in exp.unmet_or_groups:
+        ids.add(g.required_by)
+        for o in g.options:
+            ids.add(o.course_id)
+            ids.update(o.missing_courses)
+    return ids
+
+
+async def explain_eligibility(
+    session: AsyncSession, student_id: int, course_id: int, *, max_items: int
+) -> PrerequisiteExplainResponse:
+    """Giải thích có cấu trúc cho M1. Dùng chung cache đồ thị; kết quả explain
+    không cache riêng (ít gọi hơn check, vẫn chỉ 1 truy vấn khi đồ thị đã cache)."""
+    snapshot = await _graph_snapshot(session, await cache.read_generation())
+    if not await _labels_for(session, snapshot, [course_id]):
+        raise CourseNotFoundError(f"Không tìm thấy môn id={course_id}")
+    completed = await repo.load_completed(session, student_id)
+    exp = explain(snapshot.graph, course_id, completed, max_items=max_items)
+    labels = await _labels_for(session, snapshot, _ids_in_explanation(exp))
+    return _render_explanation(exp, labels)
+
+
+# --------------------------------------------------------------------- chặn chu trình
+async def ensure_edge_allowed(
+    session: AsyncSession,
+    course_id: int,
+    prereq_course_id: int,
+    *,
+    lock: bool = True,
+) -> None:
+    """Gọi TRƯỚC khi ghi cạnh "course_id cần prereq_course_id" (M4, /admin/prereqs).
+
+    Đọc DAG trực tiếp từ DB trong CÙNG giao dịch (không dùng cache) để quyết định
+    dựa trên dữ liệu mới nhất. lock=True giữ advisory lock tới khi giao dịch kết thúc,
+    nên hai admin cùng thêm cạnh không thể cùng tạo vòng.
+    Có vòng -> PrerequisiteCycleError(path) với path là MÃ MÔN, ví dụ
+    ["INT101", "INT131", "INT101"].
+    """
+    if lock:
+        await repo.lock_prerequisite_writes(session)
+    graph = PrerequisiteGraph.from_edges(await repo.load_edges(session))
+    path = would_create_cycle(graph, course_id, prereq_course_id)
+    if path is None:
+        return
+    labels = await repo.load_course_labels(session, path)
+    raise PrerequisiteCycleError(
+        [labels[c].code if c in labels else str(c) for c in path]
+    )
+
+
+def cycle_http_error(exc: PrerequisiteCycleError) -> HTTPException:
+    """Lỗi API thống nhất cho dữ liệu tạo vòng: 422 PREREQ_CYCLE kèm cycle_path."""
+    chain = " → ".join(str(c) for c in exc.path)
+    return api_error(
+        422,
+        "PREREQ_CYCLE",
+        f"Điều kiện tiên quyết này tạo vòng lặp: {chain}",
+        cycle_path=[str(c) for c in exc.path],
     )

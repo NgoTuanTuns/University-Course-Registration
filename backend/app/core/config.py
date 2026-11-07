@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     default_max_credits: int = 25
     waitlist_max_ratio: float = 0.2
     prereq_cache_ttl_sec: int = 600
+    prereq_graph_cache_ttl_sec: int = 3600
+    prereq_graph_lock_ttl_sec: int = 5
+    prereq_rate_limit_per_min: int = 120
+    prereq_explain_max_items: int = 50
     db_pool_size: int = 5
     db_max_overflow: int = 10
 

@@ -131,19 +131,15 @@ async def test_delete_course_safe_success():
         mock_zero,
     ]
 
-    with patch("app.services.course_service.get_redis") as mock_redis_getter:
-        mock_r = AsyncMock()
-
-        async def empty_scan_iter():
-            for key in ():
-                yield key
-
-        mock_r.scan_iter = MagicMock(return_value=empty_scan_iter())
-        mock_redis_getter.return_value = mock_r
+    with patch(
+        "app.services.course_service.invalidate_graph", new_callable=AsyncMock
+    ) as mock_invalidate:
         await course_service.delete_course(session, 20)
 
     assert session.delete.called
     assert session.commit.called
+    # Xóa môn làm đổi danh mục trong cache đồ thị -> phải gọi invalidation của M2
+    mock_invalidate.assert_awaited_once()
 
 
 @pytest.mark.asyncio

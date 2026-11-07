@@ -18,6 +18,7 @@ from decimal import Decimal
 from sqlalchemy import func, insert, select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+from app.core.redis import close_redis
 from app.core.security import hash_password
 from app.models import (
     CompletedCourse,
@@ -36,6 +37,8 @@ from app.seed_data import (
     build_dataset,
     validate_dataset,
 )
+from app.services.prerequisite_cache import invalidate_graph
+from app.services.prerequisite_core import PrerequisiteCycleError, assert_acyclic
 
 CHUNK = 5000
 logger = logging.getLogger("seed")
@@ -207,28 +210,26 @@ async def load_dataset(session: AsyncSession, ds: Dataset) -> dict[str, int]:
 
 
 async def _clear_prereq_cache() -> None:
-    """Quy ước Mục 7: dữ liệu tiên quyết / completed_courses đổi thì xóa các khóa `prereq:*`.
+    """Quy ước Mục 7: seed lại toàn bộ thì xóa đồ thị `prereqgraph:v1` và mọi `prereq:*`.
 
-    Không bắt buộc: Redis chưa chạy hoặc chưa cài thư viện thì chỉ cảnh báo rồi bỏ qua.
+    Dùng invalidate_graph() của M2 (SCAN + UNLINK, không KEYS). Redis chưa chạy thì
+    hàm chỉ ghi log, seed vẫn thành công.
     """
     try:
-        from redis.asyncio import from_url
+        await invalidate_graph()
+    finally:
+        await close_redis()
 
-        client = from_url(os.environ.get("REDIS_URL", "redis://redis:6379/0"))
-        try:
-            deleted = 0
-            async for key in client.scan_iter(
-                match="prereq:*", count=500
-            ):  # SCAN, không dùng KEYS
-                await client.unlink(key)
-                deleted += 1
-        finally:
-            await (
-                getattr(client, "aclose", None) or client.close
-            )()  # aclose có từ redis-py 5.0.1
-        logger.info("Đã xóa %d khóa cache prereq:*", deleted)
-    except Exception as exc:  # thiếu thư viện redis, Redis tắt...
-        logger.warning("Không xóa được cache prereq:* (%r). Bỏ qua.", exc)
+
+def _check_acyclic(ds: Dataset) -> list[str]:
+    """Kiểm tra DAG bằng assert_acyclic của M2 trước khi ghi: có vòng thì seed thất bại."""
+    try:
+        assert_acyclic(
+            (p.course_code, p.prereq_code, p.type, p.group_no) for p in ds.prereqs
+        )
+    except PrerequisiteCycleError as exc:
+        return [f"Tiên quyết có vòng lặp: {exc}"]
+    return []
 
 
 async def _prepare(session: AsyncSession, args: argparse.Namespace) -> int | None:
@@ -269,7 +270,7 @@ async def main_async(args: argparse.Namespace) -> int:
     )
     errors = validate_dataset(
         ds, waitlist_ratio=float(os.environ.get("WAITLIST_MAX_RATIO", "0.2"))
-    )
+    ) + _check_acyclic(ds)
     if errors:
         logger.error(
             "Dữ liệu mẫu KHÔNG nhất quán, dừng:\n  - %s", "\n  - ".join(errors[:10])
