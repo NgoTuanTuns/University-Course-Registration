@@ -13,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.v1 import admin, auth, prerequisites
+from app.api.v1 import admin, auth, courses, enroll, prerequisites, timetable, waitlist
 from app.core.config import get_settings
 from app.core.db import get_session
 from app.core.errors import register_error_handlers
@@ -64,6 +64,10 @@ api_router_prefix = "/api/v1"
 app.include_router(auth.router, prefix=api_router_prefix)
 app.include_router(admin.router, prefix=api_router_prefix)
 app.include_router(prerequisites.router, prefix=api_router_prefix)
+app.include_router(courses.router, prefix=api_router_prefix)
+app.include_router(enroll.router, prefix=api_router_prefix)
+app.include_router(timetable.router, prefix=api_router_prefix)
+app.include_router(waitlist.router, prefix=api_router_prefix)
 
 
 @app.get("/health", tags=["health"])
