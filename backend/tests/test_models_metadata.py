@@ -3,10 +3,13 @@
 Chạy:  cd backend && python -m pytest tests/test_models_metadata.py
 """
 
+import pytest
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.schema import CreateIndex, CreateTable
 
 from app.models import Base
+
+pytestmark = pytest.mark.unit
 
 TABLES = {
     "students",

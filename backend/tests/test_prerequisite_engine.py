@@ -21,6 +21,8 @@ from tests.prereq_cases import (
 pytestmark = pytest.mark.unit
 
 
+
+
 @pytest.fixture
 def graph():
     return PrerequisiteGraph.from_edges(ACCEPTANCE_EDGES)

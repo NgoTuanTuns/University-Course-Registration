@@ -20,6 +20,8 @@ from app.models import Course
 from app.schemas.course import CourseCreate
 from app.services import course_service
 
+pytestmark = pytest.mark.unit
+
 
 @pytest.mark.asyncio
 async def test_create_course_success():
