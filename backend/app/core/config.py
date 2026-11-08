@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -11,8 +12,10 @@ class Settings(BaseSettings):
     app_env: str = "dev"
     cors_origins: str = "http://localhost:5173,http://localhost:8080"
 
-    database_url: str
-    test_database_url: str
+    database_url: str = (
+        "postgresql+asyncpg://course_user:local_dev_password@localhost:5433/course_reg"
+    )
+    test_database_url: str = "postgresql+asyncpg://course_user:local_dev_password@localhost:5433/course_reg_test"
     redis_url: str = "redis://redis:6379/0"
     test_redis_url: str = "redis://redis:6379/1"
 
@@ -32,7 +35,11 @@ class Settings(BaseSettings):
     db_max_overflow: int = 10
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=(
+            ".env",
+            "../.env",
+            str(Path(__file__).resolve().parents[3] / ".env"),
+        ),
         env_file_encoding="utf-8",
         extra="ignore",
     )

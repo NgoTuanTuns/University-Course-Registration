@@ -8,15 +8,18 @@ import os
 import redis.asyncio as aioredis
 from redis.asyncio import Redis
 
+from app.core.config import get_settings
+
 logger = logging.getLogger(__name__)
 _redis_client: Redis | None = None
 
 
 def get_redis_url() -> str:
     """Use Redis database 1 during tests and database 0 during normal runs."""
+    settings = get_settings()
     if os.environ.get("APP_ENV") == "test" or "PYTEST_CURRENT_TEST" in os.environ:
-        return os.environ.get("TEST_REDIS_URL", "redis://redis:6379/1")
-    return os.environ.get("REDIS_URL", "redis://redis:6379/0")
+        return settings.test_redis_url
+    return settings.redis_url
 
 
 def get_redis() -> Redis:

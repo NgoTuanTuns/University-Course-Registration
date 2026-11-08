@@ -18,6 +18,7 @@ from decimal import Decimal
 from sqlalchemy import func, insert, select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+from app.core.config import get_settings
 from app.core.redis import close_redis
 from app.core.security import hash_password
 from app.models import (
@@ -260,7 +261,11 @@ def _report(args: argparse.Namespace, counts: dict[str, int]) -> None:
 
 
 async def main_async(args: argparse.Namespace) -> int:
-    url = args.database_url or os.environ.get("DATABASE_URL")
+    url = (
+        args.database_url
+        or os.environ.get("DATABASE_URL")
+        or get_settings().database_url
+    )
     if not url:
         logger.error("Thiếu DATABASE_URL (hoặc dùng --database-url).")
         return 2
