@@ -1,0 +1,26 @@
+{
+  "scope": "Local ASGI + PostgreSQL, not a network/2000-user load acceptance",
+  "redis_lock": false,
+  "db_pool_size": 5,
+  "db_max_overflow": 10,
+  "rounds": [
+    {
+      "requests": 4,
+      "elapsed_sec": 0.471,
+      "p50_ms": 304.84,
+      "p95_ms": 348.95,
+      "http_statuses": {
+        "409": 2,
+        "200": 1,
+        "201": 1
+      },
+      "business_errors": {
+        "WAITLIST_FULL": 2
+      },
+      "active_before_cancel": 1,
+      "waitlisted_before_cancel": 1,
+      "promoted_correctly": true,
+      "invariant_violations": 0
+    }
+  ]
+}

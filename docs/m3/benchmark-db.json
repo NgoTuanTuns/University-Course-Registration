@@ -1,0 +1,62 @@
+{
+  "scope": "Local ASGI + PostgreSQL, not a network/2000-user load acceptance",
+  "redis_lock": false,
+  "db_pool_size": 5,
+  "db_max_overflow": 10,
+  "rounds": [
+    {
+      "requests": 200,
+      "elapsed_sec": 5.364,
+      "p50_ms": 3162.89,
+      "p95_ms": 3597.29,
+      "http_statuses": {
+        "409": 198,
+        "200": 1,
+        "201": 1
+      },
+      "business_errors": {
+        "WAITLIST_FULL": 198
+      },
+      "active_before_cancel": 1,
+      "waitlisted_before_cancel": 1,
+      "promoted_correctly": true,
+      "invariant_violations": 0
+    },
+    {
+      "requests": 200,
+      "elapsed_sec": 4.745,
+      "p50_ms": 2531.23,
+      "p95_ms": 3316.31,
+      "http_statuses": {
+        "409": 198,
+        "200": 1,
+        "201": 1
+      },
+      "business_errors": {
+        "WAITLIST_FULL": 198
+      },
+      "active_before_cancel": 1,
+      "waitlisted_before_cancel": 1,
+      "promoted_correctly": true,
+      "invariant_violations": 0
+    },
+    {
+      "requests": 200,
+      "elapsed_sec": 5.824,
+      "p50_ms": 2956.07,
+      "p95_ms": 4379.52,
+      "http_statuses": {
+        "409": 198,
+        "200": 1,
+        "201": 1
+      },
+      "business_errors": {
+        "WAITLIST_FULL": 198
+      },
+      "active_before_cancel": 1,
+      "waitlisted_before_cancel": 1,
+      "promoted_correctly": true,
+      "invariant_violations": 0
+    }
+  ]
+}

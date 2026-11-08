@@ -122,6 +122,37 @@
         "title": "CourseOut",
         "type": "object"
       },
+      "CoursePage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/OfferingItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "page",
+          "page_size"
+        ],
+        "title": "CoursePage",
+        "type": "object"
+      },
       "CourseUpdate": {
         "properties": {
           "credits": {
@@ -166,6 +197,70 @@
           }
         },
         "title": "CourseUpdate",
+        "type": "object"
+      },
+      "EnrollRequest": {
+        "properties": {
+          "offering_id": {
+            "exclusiveMinimum": 0.0,
+            "title": "Offering Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "offering_id"
+        ],
+        "title": "EnrollRequest",
+        "type": "object"
+      },
+      "EnrollmentResult": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "offering_id": {
+            "title": "Offering Id",
+            "type": "integer"
+          },
+          "position": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Position"
+          },
+          "status": {
+            "enum": [
+              "ACTIVE",
+              "WAITLISTED",
+              "CANCELLED"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          }
+        },
+        "required": [
+          "id",
+          "offering_id",
+          "status"
+        ],
+        "title": "EnrollmentResult",
         "type": "object"
       },
       "HTTPValidationError": {
@@ -257,6 +352,107 @@
           "path"
         ],
         "title": "MissingCourseOut",
+        "type": "object"
+      },
+      "OfferingItem": {
+        "properties": {
+          "capacity": {
+            "title": "Capacity",
+            "type": "integer"
+          },
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "course_id": {
+            "title": "Course Id",
+            "type": "integer"
+          },
+          "credits": {
+            "title": "Credits",
+            "type": "integer"
+          },
+          "enrolled_count": {
+            "title": "Enrolled Count",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "instructor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instructor"
+          },
+          "my_status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "ENROLLED",
+                  "WAITLISTED"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "My Status"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "room": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Room"
+          },
+          "schedule": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Schedule",
+            "type": "array"
+          },
+          "section": {
+            "title": "Section",
+            "type": "string"
+          },
+          "term": {
+            "title": "Term",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "course_id",
+          "code",
+          "name",
+          "credits",
+          "term",
+          "section",
+          "instructor",
+          "room",
+          "schedule",
+          "capacity",
+          "enrolled_count"
+        ],
+        "title": "OfferingItem",
         "type": "object"
       },
       "OrGroupExplainOut": {
@@ -486,6 +682,155 @@
         "title": "RefreshRequest",
         "type": "object"
       },
+      "Timetable": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/TimetableItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "max_credits": {
+            "title": "Max Credits",
+            "type": "integer"
+          },
+          "term": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Term"
+          },
+          "total_credits": {
+            "title": "Total Credits",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "term",
+          "items",
+          "total_credits",
+          "max_credits"
+        ],
+        "title": "Timetable",
+        "type": "object"
+      },
+      "TimetableItem": {
+        "properties": {
+          "capacity": {
+            "title": "Capacity",
+            "type": "integer"
+          },
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "course_id": {
+            "title": "Course Id",
+            "type": "integer"
+          },
+          "credits": {
+            "title": "Credits",
+            "type": "integer"
+          },
+          "enrolled_count": {
+            "title": "Enrolled Count",
+            "type": "integer"
+          },
+          "enrollment_id": {
+            "title": "Enrollment Id",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "instructor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instructor"
+          },
+          "my_status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "ENROLLED",
+                  "WAITLISTED"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "My Status"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "room": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Room"
+          },
+          "schedule": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Schedule",
+            "type": "array"
+          },
+          "section": {
+            "title": "Section",
+            "type": "string"
+          },
+          "term": {
+            "title": "Term",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "course_id",
+          "code",
+          "name",
+          "credits",
+          "term",
+          "section",
+          "instructor",
+          "room",
+          "schedule",
+          "capacity",
+          "enrolled_count",
+          "enrollment_id",
+          "version"
+        ],
+        "title": "TimetableItem",
+        "type": "object"
+      },
       "TokenResponse": {
         "properties": {
           "access_token": {
@@ -606,6 +951,166 @@
           "type"
         ],
         "title": "ValidationError",
+        "type": "object"
+      },
+      "WaitlistItem": {
+        "properties": {
+          "blocked_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Blocked Reason"
+          },
+          "capacity": {
+            "title": "Capacity",
+            "type": "integer"
+          },
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "course_id": {
+            "title": "Course Id",
+            "type": "integer"
+          },
+          "credits": {
+            "title": "Credits",
+            "type": "integer"
+          },
+          "enqueued_at": {
+            "format": "date-time",
+            "title": "Enqueued At",
+            "type": "string"
+          },
+          "enrolled_count": {
+            "title": "Enrolled Count",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "instructor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instructor"
+          },
+          "my_status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "ENROLLED",
+                  "WAITLISTED"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "My Status"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "position": {
+            "title": "Position",
+            "type": "integer"
+          },
+          "room": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Room"
+          },
+          "schedule": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Schedule",
+            "type": "array"
+          },
+          "section": {
+            "title": "Section",
+            "type": "string"
+          },
+          "term": {
+            "title": "Term",
+            "type": "string"
+          },
+          "waitlist_id": {
+            "title": "Waitlist Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "course_id",
+          "code",
+          "name",
+          "credits",
+          "term",
+          "section",
+          "instructor",
+          "room",
+          "schedule",
+          "capacity",
+          "enrolled_count",
+          "waitlist_id",
+          "position",
+          "enqueued_at",
+          "blocked_reason"
+        ],
+        "title": "WaitlistItem",
+        "type": "object"
+      },
+      "WaitlistPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/WaitlistItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "page",
+          "page_size"
+        ],
+        "title": "WaitlistPage",
         "type": "object"
       }
     }
@@ -1076,6 +1581,380 @@
         ]
       }
     },
+    "/api/v1/courses": {
+      "get": {
+        "description": "A time filter matches at least one meeting on day fully contained in [from, to]. Latest term by default.",
+        "operationId": "courses_api_v1_courses_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "term",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^\\d{4}-[1-3]$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Term"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "section",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 10,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Section"
+            }
+          },
+          {
+            "in": "query",
+            "name": "credits",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 10,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Credits"
+            }
+          },
+          {
+            "in": "query",
+            "name": "instructor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 150,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Instructor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "day",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 7,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Day"
+            }
+          },
+          {
+            "in": "query",
+            "name": "from",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "From"
+            }
+          },
+          {
+            "in": "query",
+            "name": "to",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "To"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CoursePage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Courses",
+        "tags": [
+          "courses"
+        ]
+      }
+    },
+    "/api/v1/enroll": {
+      "post": {
+        "operationId": "enroll_api_v1_enroll_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnrollRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnrollmentResult"
+                }
+              }
+            },
+            "description": "WAITLISTED"
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnrollmentResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Enroll",
+        "tags": [
+          "enrollment"
+        ]
+      }
+    },
+    "/api/v1/enroll/{enrollment_id}": {
+      "delete": {
+        "description": "Owner only. Repeating a cancellation succeeds without decrementing twice.",
+        "operationId": "cancel_api_v1_enroll__enrollment_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "enrollment_id",
+            "required": true,
+            "schema": {
+              "title": "Enrollment Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Version"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnrollmentResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel",
+        "tags": [
+          "enrollment"
+        ]
+      }
+    },
     "/api/v1/prerequisites/check": {
       "get": {
         "operationId": "check_prerequisites_api_v1_prerequisites_check_get",
@@ -1232,6 +2111,204 @@
         "summary": "Explain Prerequisites",
         "tags": [
           "prerequisites"
+        ]
+      }
+    },
+    "/api/v1/timetable": {
+      "get": {
+        "operationId": "get_timetable_api_v1_timetable_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "term",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^\\d{4}-[1-3]$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Term"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Timetable"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Timetable",
+        "tags": [
+          "timetable"
+        ]
+      }
+    },
+    "/api/v1/waitlist": {
+      "get": {
+        "operationId": "get_waitlist_api_v1_waitlist_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WaitlistPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Waitlist",
+        "tags": [
+          "waitlist"
+        ]
+      }
+    },
+    "/api/v1/waitlist/{waitlist_id}": {
+      "delete": {
+        "operationId": "leave_waitlist_api_v1_waitlist__waitlist_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "waitlist_id",
+            "required": true,
+            "schema": {
+              "title": "Waitlist Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Leave Waitlist Api V1 Waitlist  Waitlist Id  Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Leave Waitlist",
+        "tags": [
+          "waitlist"
         ]
       }
     },

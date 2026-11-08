@@ -5,6 +5,7 @@ from __future__ import annotations
 from functools import lru_cache
 from pathlib import Path
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -25,7 +26,13 @@ class Settings(BaseSettings):
     refresh_token_ttl_days: int = 7
 
     default_max_credits: int = 25
-    waitlist_max_ratio: float = 0.2
+    waitlist_max_ratio: float = Field(default=0.2, gt=0)
+    min_break_minutes: int = Field(default=0, ge=0)
+    enrollment_redis_lock_enabled: bool = False
+    lock_seat_threshold: int = Field(default=3, ge=0)
+    enrollment_lock_ttl_ms: int = Field(default=5000, gt=0)
+    enrollment_lock_wait_sec: float = Field(default=1.5, gt=0)
+    enrollment_idempotency_ttl_sec: int = Field(default=600, gt=0)
     prereq_cache_ttl_sec: int = 600
     prereq_graph_cache_ttl_sec: int = 3600
     prereq_graph_lock_ttl_sec: int = 5
