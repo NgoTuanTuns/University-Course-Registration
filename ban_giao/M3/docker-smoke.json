@@ -1,0 +1,18 @@
+{
+  "compose_project": "cnpm-m3",
+  "api_url": "http://localhost:8000",
+  "health": "ok",
+  "services": {
+    "api": "healthy",
+    "db": "healthy",
+    "redis": "healthy"
+  },
+  "migration": "upgrade head passed; alembic check reports no new operations",
+  "seed": "minimal profile loaded into the new development database",
+  "authenticated_get": {
+    "/api/v1/courses": 200,
+    "/api/v1/timetable": 200,
+    "/api/v1/waitlist": 200
+  },
+  "openapi_snapshot": "matches in Windows and Docker"
+}
