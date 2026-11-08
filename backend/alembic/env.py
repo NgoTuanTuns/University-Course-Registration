@@ -36,6 +36,10 @@ def get_url() -> str:
         raise RuntimeError(
             "Chưa có URL database: đặt DATABASE_URL (hoặc dùng -x dburl=...)"
         )
+    if os.path.exists("/.dockerenv"):
+        url = url.replace("@localhost:5433", "@db:5432").replace(
+            "@127.0.0.1:5433", "@db:5432"
+        )
     return url
 
 

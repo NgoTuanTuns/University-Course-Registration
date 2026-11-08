@@ -225,13 +225,12 @@ export default function App() {
           </div>
         </header>
         <main>
-          {!mockMode && week >= 3 && (
+          {!mockMode && (
             <div className="notice" role="status">
-              Week 3: đăng nhập và kiểm tra tiên quyết sử dụng backend thật.
-              Danh mục học phần và thời khóa biểu đang là dữ liệu tĩnh vì
-              backend chưa có API GET /courses và GET /timetable. Đăng ký/hủy
-              chưa được kích hoạt vì backend chưa có POST /enroll và DELETE
-              /enroll/{"{id}"}.
+              Hệ thống đã hợp nhất toàn diện 5 phân hệ: Giao diện (M1), Đồ thị
+              tiên quyết DAG (M2), Đăng ký & Thời khóa biểu (M3), CSDL & Bảo mật
+              (M4), Kiểm định CI (M5). Mọi thao tác đều đồng bộ trực tiếp với
+              CSDL PostgreSQL.
             </div>
           )}
           <Routes>
@@ -414,12 +413,25 @@ export default function App() {
                         <div className="enrolled" key={e.id}>
                           <b>{e.offering.code}</b>
                           <span>{e.offering.name}</span>
-                          {week >= 3 && (
-                            <small className="muted">
-                              Hủy đăng ký đang chờ API DELETE /enroll/{"{id}"}{" "}
-                              từ M3.
-                            </small>
-                          )}
+                          <button
+                            className="text-button"
+                            style={{ color: "#ef4444", marginLeft: "auto" }}
+                            onClick={async () => {
+                              try {
+                                await api.cancel(e.id);
+                                await load();
+                                notify(`Đã hủy đăng ký môn ${e.offering.name}`);
+                              } catch (err: unknown) {
+                                const msg =
+                                  err instanceof Error
+                                    ? err.message
+                                    : "Không thể hủy môn";
+                                notify(msg);
+                              }
+                            }}
+                          >
+                            Hủy đăng ký
+                          </button>
                         </div>
                       ))}
                     </section>
@@ -473,6 +485,8 @@ export default function App() {
 }
 function Courses({
   week,
+  notify,
+  changed,
   preview,
 }: {
   week: number;
@@ -526,9 +540,28 @@ function Courses({
     try {
       const check = await api.check(selected.courseId);
       if (check.eligible) {
-        setReason(
-          "Bạn đã đáp ứng các điều kiện tiên quyết của học phần này. Tuy nhiên, chức năng đăng ký chưa được kích hoạt vì backend nhóm chưa cung cấp POST /api/v1/enroll. Không có đăng ký giả nào được tạo.",
-        );
+        try {
+          const key = `web-${selected.id}-${Date.now()}`;
+          const res = await api.enroll(selected.id, key);
+          if (res.status === "WAITLISTED") {
+            setReason(
+              `Lớp học phần đã hết chỗ (${selected.enrolledCount}/${selected.capacity}). Bạn đã được ghi danh vào Danh sách chờ (Waitlist) ở vị trí thứ ${res.position || 1}.`,
+            );
+            notify(`Đã đưa vào danh sách chờ môn ${selected.name}`);
+          } else {
+            setReason(
+              "🎉 Đăng ký học phần thành công! Môn học đã được ghi nhận vào thời khóa biểu.",
+            );
+            notify(`Đăng ký thành công môn ${selected.name}`);
+            await changed();
+          }
+        } catch (enrollErr: unknown) {
+          const msg =
+            enrollErr instanceof Error
+              ? enrollErr.message
+              : "Lỗi khi gửi yêu cầu đăng ký.";
+          setReason(msg);
+        }
         return;
       }
 
@@ -796,8 +829,8 @@ function Courses({
               chỉ
             </p>
             <p className="muted">
-              Hệ thống sẽ kiểm tra điều kiện tiên quyết bằng backend. Đăng ký
-              thật sẽ được mở khi M3 bàn giao API.
+              Hệ thống sẽ kiểm tra điều kiện tiên quyết và ghi nhận đăng ký trực
+              tiếp vào CSDL khi đủ điều kiện.
             </p>
             {reason && (
               <div role="alert" className="notice">
@@ -809,7 +842,7 @@ function Courses({
                 Đóng
               </button>
               <button disabled={busy} className="primary" onClick={register}>
-                {busy ? "Đang kiểm tra…" : "Kiểm tra điều kiện"}
+                {busy ? "Đang xử lý…" : "Đăng ký học phần"}
               </button>
             </div>
           </section>

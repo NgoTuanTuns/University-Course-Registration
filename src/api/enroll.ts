@@ -1,22 +1,31 @@
-import { ApiError } from "./http";
+import { http } from "./http";
 
-// Chưa có POST /enroll và DELETE /enroll/{id} trong backend nhóm hiện tại.
-// Không gửi request và không giả lập đăng ký thành công.
-export function enroll(_offeringId: number, _idempotencyKey: string): never {
-  void _offeringId;
-  void _idempotencyKey;
-  throw new ApiError(
-    "FEATURE_PENDING",
-    "Chức năng đăng ký đang chờ API POST /api/v1/enroll từ M3.",
-    501,
+export interface EnrollResult {
+  id: number;
+  offeringId: number;
+  status: "ACTIVE" | "WAITLISTED" | "CANCELLED";
+  version?: number | null;
+  position?: number | null;
+}
+
+export async function enroll(
+  offeringId: number,
+  idempotencyKey?: string,
+): Promise<EnrollResult> {
+  const headers: Record<string, string> = {};
+  if (idempotencyKey) {
+    headers["Idempotency-Key"] = idempotencyKey;
+  }
+  return http<EnrollResult>(
+    "/enroll",
+    "POST",
+    { offeringId },
+    undefined,
+    true,
+    headers,
   );
 }
 
-export function cancel(_enrollmentId: number): never {
-  void _enrollmentId;
-  throw new ApiError(
-    "FEATURE_PENDING",
-    "Chức năng hủy đăng ký đang chờ API DELETE /api/v1/enroll/{id} từ M3.",
-    501,
-  );
+export async function cancel(enrollmentId: number): Promise<EnrollResult> {
+  return http<EnrollResult>(`/enroll/${enrollmentId}`, "DELETE");
 }

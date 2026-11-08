@@ -19,7 +19,12 @@ def get_redis_url() -> str:
     settings = get_settings()
     if os.environ.get("APP_ENV") == "test" or "PYTEST_CURRENT_TEST" in os.environ:
         return settings.test_redis_url
-    return settings.redis_url
+    url = settings.redis_url
+    if os.path.exists("/.dockerenv"):
+        url = url.replace("@localhost:6380", "@redis:6379").replace(
+            "@127.0.0.1:6380", "@redis:6379"
+        )
+    return url
 
 
 def get_redis() -> Redis:

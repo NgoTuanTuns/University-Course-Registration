@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import AsyncIterator
 
 from sqlalchemy.ext.asyncio import (
@@ -25,6 +26,10 @@ def _get_session_factory() -> async_sessionmaker[AsyncSession]:
 
     settings = get_settings()
     database_url = settings.database_url
+    if os.path.exists("/.dockerenv"):
+        database_url = database_url.replace("@localhost:5433", "@db:5432").replace(
+            "@127.0.0.1:5433", "@db:5432"
+        )
     if database_url.startswith("postgresql://"):
         database_url = database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
 

@@ -2,14 +2,11 @@ import type { Offering, Paginated } from "../types";
 import { getStaticOfferings } from "../mocks/data";
 import { http, mockMode } from "./http";
 
-const week = Number(import.meta.env.VITE_WEEK || 3);
-
 export async function courses(
   query: string,
   signal?: AbortSignal,
 ): Promise<Paginated<Offering>> {
-  // Week 3: backend chưa có GET /courses cho sinh viên. Dùng danh mục tĩnh bám seed KIT.
-  if (!mockMode && week >= 3) {
+  if (mockMode) {
     const params = new URLSearchParams(query);
     const items = getStaticOfferings().filter((item) => {
       const keyword = (params.get("q") || "").toLowerCase();
@@ -42,8 +39,20 @@ export async function courses(
       pageSize,
     };
   }
+
+  // Chuyển đổi tham số bộ lọc từ UI (start, end) sang định dạng API backend M3 (from, to)
+  const params = new URLSearchParams(query);
+  if (params.has("start")) {
+    params.set("from", params.get("start")!);
+    params.delete("start");
+  }
+  if (params.has("end")) {
+    params.set("to", params.get("end")!);
+    params.delete("end");
+  }
+
   return http<Paginated<Offering>>(
-    `/courses?${query}`,
+    `/courses?${params.toString()}`,
     "GET",
     undefined,
     signal,

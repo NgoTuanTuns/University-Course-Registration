@@ -269,6 +269,10 @@ async def main_async(args: argparse.Namespace) -> int:
     if not url:
         logger.error("Thiếu DATABASE_URL (hoặc dùng --database-url).")
         return 2
+    if os.path.exists("/.dockerenv"):
+        url = url.replace("@localhost:5433", "@db:5432").replace(
+            "@127.0.0.1:5433", "@db:5432"
+        )
     ds = build_dataset(
         args.profile,
         default_max_credits=int(os.environ.get("DEFAULT_MAX_CREDITS", "25")),
