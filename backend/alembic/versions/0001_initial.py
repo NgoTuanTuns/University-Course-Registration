@@ -7,9 +7,11 @@ Create Date: 2026-10-20
 Ghi chú: migration này VIẾT TAY (không autogenerate) để đảm bảo đúng từng cột, CHECK có tên,
 chỉ mục từng phần. Sau khi sửa models, luôn chạy `alembic check` để chắc models và DB còn khớp.
 """
-from alembic import op
+
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
+
+from alembic import op
 
 revision = "0001_initial"
 down_revision = None
@@ -25,13 +27,29 @@ def _create_students() -> None:
         sa.Column("email", sa.String(length=255), nullable=False),
         sa.Column("password_hash", sa.String(length=255), nullable=False),
         sa.Column("full_name", sa.String(length=150), nullable=False),
-        sa.Column("role", sa.String(length=10), server_default="student", nullable=False),
+        sa.Column(
+            "role", sa.String(length=10), server_default="student", nullable=False
+        ),
         sa.Column("program", sa.String(length=100), nullable=True),
-        sa.Column("max_credits", sa.SmallInteger(), server_default=sa.text("25"), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "max_credits",
+            sa.SmallInteger(),
+            server_default=sa.text("25"),
+            nullable=False,
+        ),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.CheckConstraint("role IN ('student','admin')", name="ck_students_role"),
-        sa.CheckConstraint("max_credits BETWEEN 1 AND 40", name="ck_students_max_credits"),
-        sa.CheckConstraint("role <> 'student' OR mssv IS NOT NULL", name="ck_students_student_has_mssv"),
+        sa.CheckConstraint(
+            "max_credits BETWEEN 1 AND 40", name="ck_students_max_credits"
+        ),
+        sa.CheckConstraint(
+            "role <> 'student' OR mssv IS NOT NULL", name="ck_students_student_has_mssv"
+        ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_students")),
         sa.UniqueConstraint("mssv", name="uq_students_mssv"),
         sa.UniqueConstraint("email", name="uq_students_email"),
@@ -46,7 +64,12 @@ def _create_courses() -> None:
         sa.Column("name", sa.String(length=200), nullable=False),
         sa.Column("credits", sa.SmallInteger(), nullable=False),
         sa.Column("description", sa.Text(), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.CheckConstraint("credits BETWEEN 1 AND 10", name="ck_courses_credits"),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_courses")),
         sa.UniqueConstraint("code", name="uq_courses_code"),
@@ -62,17 +85,32 @@ def _create_course_offerings() -> None:
         sa.Column("section", sa.String(length=10), nullable=False),
         sa.Column("instructor", sa.String(length=150), nullable=True),
         sa.Column("capacity", sa.SmallInteger(), nullable=False),
-        sa.Column("enrolled_count", sa.SmallInteger(), server_default=sa.text("0"), nullable=False),
+        sa.Column(
+            "enrolled_count",
+            sa.SmallInteger(),
+            server_default=sa.text("0"),
+            nullable=False,
+        ),
         sa.Column("schedule", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
         sa.Column("room", sa.String(length=50), nullable=True),
         sa.CheckConstraint("capacity > 0", name="ck_offerings_capacity"),
-        sa.CheckConstraint("enrolled_count BETWEEN 0 AND capacity", name="ck_offerings_enrolled_range"),
-        sa.ForeignKeyConstraint(["course_id"], ["courses.id"], name=op.f("fk_course_offerings_course_id_courses")),
+        sa.CheckConstraint(
+            "enrolled_count BETWEEN 0 AND capacity", name="ck_offerings_enrolled_range"
+        ),
+        sa.ForeignKeyConstraint(
+            ["course_id"],
+            ["courses.id"],
+            name=op.f("fk_course_offerings_course_id_courses"),
+        ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_course_offerings")),
-        sa.UniqueConstraint("course_id", "term", "section", name="uq_offerings_course_term_section"),
+        sa.UniqueConstraint(
+            "course_id", "term", "section", name="uq_offerings_course_term_section"
+        ),
     )
     op.create_index("ix_offerings_term", "course_offerings", ["term"], unique=False)
-    op.create_index("ix_offerings_course", "course_offerings", ["course_id"], unique=False)
+    op.create_index(
+        "ix_offerings_course", "course_offerings", ["course_id"], unique=False
+    )
 
 
 def _create_prerequisites() -> None:
@@ -81,7 +119,9 @@ def _create_prerequisites() -> None:
         sa.Column("course_id", sa.Integer(), nullable=False),
         sa.Column("prereq_course_id", sa.Integer(), nullable=False),
         sa.Column("type", sa.String(length=3), server_default="AND", nullable=False),
-        sa.Column("group_no", sa.SmallInteger(), server_default=sa.text("0"), nullable=False),
+        sa.Column(
+            "group_no", sa.SmallInteger(), server_default=sa.text("0"), nullable=False
+        ),
         sa.CheckConstraint("type IN ('AND','OR')", name="ck_prereq_type"),
         sa.CheckConstraint("course_id <> prereq_course_id", name="ck_prereq_no_self"),
         sa.CheckConstraint(
@@ -89,16 +129,23 @@ def _create_prerequisites() -> None:
             name="ck_prereq_group",
         ),
         sa.ForeignKeyConstraint(
-            ["course_id"], ["courses.id"],
-            name=op.f("fk_prerequisites_course_id_courses"), ondelete="CASCADE",
+            ["course_id"],
+            ["courses.id"],
+            name=op.f("fk_prerequisites_course_id_courses"),
+            ondelete="CASCADE",
         ),
         sa.ForeignKeyConstraint(
-            ["prereq_course_id"], ["courses.id"],
+            ["prereq_course_id"],
+            ["courses.id"],
             name=op.f("fk_prerequisites_prereq_course_id_courses"),
         ),
-        sa.PrimaryKeyConstraint("course_id", "prereq_course_id", name=op.f("pk_prerequisites")),
+        sa.PrimaryKeyConstraint(
+            "course_id", "prereq_course_id", name=op.f("pk_prerequisites")
+        ),
     )
-    op.create_index("ix_prereq_prereq", "prerequisites", ["prereq_course_id"], unique=False)
+    op.create_index(
+        "ix_prereq_prereq", "prerequisites", ["prereq_course_id"], unique=False
+    )
 
 
 def _create_completed_courses() -> None:
@@ -110,13 +157,19 @@ def _create_completed_courses() -> None:
         sa.Column("term", sa.String(length=10), nullable=True),
         sa.CheckConstraint("grade BETWEEN 0 AND 10", name="ck_completed_grade"),
         sa.ForeignKeyConstraint(
-            ["student_id"], ["students.id"],
-            name=op.f("fk_completed_courses_student_id_students"), ondelete="CASCADE",
+            ["student_id"],
+            ["students.id"],
+            name=op.f("fk_completed_courses_student_id_students"),
+            ondelete="CASCADE",
         ),
         sa.ForeignKeyConstraint(
-            ["course_id"], ["courses.id"], name=op.f("fk_completed_courses_course_id_courses"),
+            ["course_id"],
+            ["courses.id"],
+            name=op.f("fk_completed_courses_course_id_courses"),
         ),
-        sa.PrimaryKeyConstraint("student_id", "course_id", name=op.f("pk_completed_courses")),
+        sa.PrimaryKeyConstraint(
+            "student_id", "course_id", name=op.f("pk_completed_courses")
+        ),
     )
 
 
@@ -126,30 +179,50 @@ def _create_enrollments() -> None:
         sa.Column("id", sa.Integer(), sa.Identity(always=False), nullable=False),
         sa.Column("student_id", sa.Integer(), nullable=False),
         sa.Column("offering_id", sa.Integer(), nullable=False),
-        sa.Column("status", sa.String(length=10), server_default="ACTIVE", nullable=False),
+        sa.Column(
+            "status", sa.String(length=10), server_default="ACTIVE", nullable=False
+        ),
         sa.Column("version", sa.Integer(), server_default=sa.text("0"), nullable=False),
-        sa.Column("enrolled_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "enrolled_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.Column("cancelled_at", sa.DateTime(timezone=True), nullable=True),
-        sa.CheckConstraint("status IN ('ACTIVE','CANCELLED')", name="ck_enrollments_status"),
-        sa.ForeignKeyConstraint(
-            ["student_id"], ["students.id"],
-            name=op.f("fk_enrollments_student_id_students"), ondelete="CASCADE",
+        sa.CheckConstraint(
+            "status IN ('ACTIVE','CANCELLED')", name="ck_enrollments_status"
         ),
         sa.ForeignKeyConstraint(
-            ["offering_id"], ["course_offerings.id"],
+            ["student_id"],
+            ["students.id"],
+            name=op.f("fk_enrollments_student_id_students"),
+            ondelete="CASCADE",
+        ),
+        sa.ForeignKeyConstraint(
+            ["offering_id"],
+            ["course_offerings.id"],
             name=op.f("fk_enrollments_offering_id_course_offerings"),
         ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_enrollments")),
     )
     # Mỗi sinh viên chỉ có một đăng ký ACTIVE cho mỗi lớp (hủy rồi vẫn đăng ký lại được)
     op.create_index(
-        "uq_enrollments_active", "enrollments", ["student_id", "offering_id"],
-        unique=True, postgresql_where=sa.text("status = 'ACTIVE'"),
+        "uq_enrollments_active",
+        "enrollments",
+        ["student_id", "offering_id"],
+        unique=True,
+        postgresql_where=sa.text("status = 'ACTIVE'"),
     )
-    op.create_index("ix_enrollments_student", "enrollments", ["student_id", "status"], unique=False)
     op.create_index(
-        "ix_enrollments_offering", "enrollments", ["offering_id"],
-        unique=False, postgresql_where=sa.text("status = 'ACTIVE'"),
+        "ix_enrollments_student", "enrollments", ["student_id", "status"], unique=False
+    )
+    op.create_index(
+        "ix_enrollments_offering",
+        "enrollments",
+        ["offering_id"],
+        unique=False,
+        postgresql_where=sa.text("status = 'ACTIVE'"),
     )
 
 
@@ -160,20 +233,36 @@ def _create_waitlist() -> None:
         sa.Column("student_id", sa.Integer(), nullable=False),
         sa.Column("offering_id", sa.Integer(), nullable=False),
         sa.Column("position", sa.Integer(), nullable=False),
-        sa.Column("enqueued_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "enqueued_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.CheckConstraint("position > 0", name="ck_waitlist_position"),
         sa.ForeignKeyConstraint(
-            ["student_id"], ["students.id"],
-            name=op.f("fk_waitlist_student_id_students"), ondelete="CASCADE",
+            ["student_id"],
+            ["students.id"],
+            name=op.f("fk_waitlist_student_id_students"),
+            ondelete="CASCADE",
         ),
         sa.ForeignKeyConstraint(
-            ["offering_id"], ["course_offerings.id"],
-            name=op.f("fk_waitlist_offering_id_course_offerings"), ondelete="CASCADE",
+            ["offering_id"],
+            ["course_offerings.id"],
+            name=op.f("fk_waitlist_offering_id_course_offerings"),
+            ondelete="CASCADE",
         ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_waitlist")),
-        sa.UniqueConstraint("student_id", "offering_id", name="uq_waitlist_student_offering"),
+        sa.UniqueConstraint(
+            "student_id", "offering_id", name="uq_waitlist_student_offering"
+        ),
     )
-    op.create_index("ix_waitlist_queue", "waitlist", ["offering_id", "enqueued_at", "id"], unique=False)
+    op.create_index(
+        "ix_waitlist_queue",
+        "waitlist",
+        ["offering_id", "enqueued_at", "id"],
+        unique=False,
+    )
 
 
 def upgrade() -> None:

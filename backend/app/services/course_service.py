@@ -16,9 +16,9 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import api_error
-from app.core.redis import get_redis
 from app.models import CompletedCourse, Course, CourseOffering, Prerequisite
 from app.schemas.course import CourseCreate, CourseUpdate
+from app.services.prerequisite_cache import invalidate_graph
 
 logger = logging.getLogger(__name__)
 
@@ -174,13 +174,6 @@ async def delete_course(session: AsyncSession, course_id: int) -> None:
     await session.delete(course)
     await session.commit()
 
-    # Xóa cache tiên quyết trong Redis nếu có
-    try:
-        r = get_redis()
-        keys = []
-        async for k in r.scan_iter(match="prereq:*"):
-            keys.append(k)
-        if keys:
-            await r.delete(*keys)
-    except Exception as exc:
-        logger.warning("Không thể xóa cache Redis sau khi xóa học phần: %s", exc)
+    # Danh mục môn trong cache đồ thị đổi -> xóa đồ thị + prereq:* (hàm của M2,
+    # tự ghi log và không ném lỗi khi Redis gặp sự cố).
+    await invalidate_graph()

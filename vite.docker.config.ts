@@ -6,5 +6,11 @@ export default mergeConfig(baseConfig, {
     watch: {
       usePolling: true,
     },
+    proxy: {
+      "/api": {
+        target: process.env.VITE_BACKEND_URL || "http://api:8000",
+        changeOrigin: true,
+      },
+    },
   },
 });

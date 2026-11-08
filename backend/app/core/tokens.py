@@ -16,6 +16,8 @@ from datetime import UTC, datetime, timedelta
 
 import jwt
 
+from app.core.config import get_settings
+
 ALGORITHM = "HS256"
 ACCESS = "access"
 REFRESH = "refresh"
@@ -45,10 +47,12 @@ class TokenClaims:
 
 def get_secret() -> str:
     """Đọc JWT_SECRET. Ở APP_ENV=prod từ chối giá trị mẫu hoặc quá ngắn (dưới 32 ký tự)."""
-    secret = os.environ.get("JWT_SECRET", "")
+    settings = get_settings()
+    secret = os.environ.get("JWT_SECRET") or settings.jwt_secret
     if not secret:
         raise RuntimeError("Chưa đặt JWT_SECRET trong .env")
-    if os.environ.get("APP_ENV") == "prod" and (
+    app_env = os.environ.get("APP_ENV") or settings.app_env
+    if app_env == "prod" and (
         secret == _PLACEHOLDER_SECRET or len(secret) < MIN_SECRET_LENGTH
     ):
         raise RuntimeError(
@@ -58,11 +62,17 @@ def get_secret() -> str:
 
 
 def access_ttl_seconds() -> int:
-    return int(os.environ.get("ACCESS_TOKEN_TTL_MIN", "30")) * 60
+    settings = get_settings()
+    val = os.environ.get("ACCESS_TOKEN_TTL_MIN")
+    ttl = int(val) if val else settings.access_token_ttl_min
+    return ttl * 60
 
 
 def refresh_ttl_seconds() -> int:
-    return int(os.environ.get("REFRESH_TOKEN_TTL_DAYS", "7")) * 86400
+    settings = get_settings()
+    val = os.environ.get("REFRESH_TOKEN_TTL_DAYS")
+    ttl = int(val) if val else settings.refresh_token_ttl_days
+    return ttl * 86400
 
 
 def _encode(

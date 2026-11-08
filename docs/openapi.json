@@ -216,6 +216,76 @@
         "title": "MessageResponse",
         "type": "object"
       },
+      "MissingCourseOut": {
+        "properties": {
+          "course_code": {
+            "title": "Course Code",
+            "type": "string"
+          },
+          "course_name": {
+            "title": "Course Name",
+            "type": "string"
+          },
+          "kind": {
+            "description": "DIRECT: môn đang xét đòi trực tiếp; TRANSITIVE: đòi gián tiếp",
+            "enum": [
+              "DIRECT",
+              "TRANSITIVE"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "path": {
+            "description": "Chuỗi mã môn từ môn đang xét tới môn còn thiếu (đường ngắn nhất)",
+            "items": {
+              "type": "string"
+            },
+            "title": "Path",
+            "type": "array"
+          },
+          "required_by": {
+            "description": "Mã môn trực tiếp đòi hỏi môn này",
+            "title": "Required By",
+            "type": "string"
+          }
+        },
+        "required": [
+          "course_code",
+          "course_name",
+          "kind",
+          "required_by",
+          "path"
+        ],
+        "title": "MissingCourseOut",
+        "type": "object"
+      },
+      "OrGroupExplainOut": {
+        "properties": {
+          "group_no": {
+            "title": "Group No",
+            "type": "integer"
+          },
+          "options": {
+            "items": {
+              "$ref": "#/components/schemas/OrOptionOut"
+            },
+            "title": "Options",
+            "type": "array"
+          },
+          "required_by": {
+            "description": "Mã môn có nhóm 'hoặc' này",
+            "title": "Required By",
+            "type": "string"
+          }
+        },
+        "required": [
+          "group_no",
+          "required_by",
+          "options"
+        ],
+        "title": "OrGroupExplainOut",
+        "type": "object"
+      },
       "OrGroupOut": {
         "properties": {
           "group_no": {
@@ -235,6 +305,39 @@
           "options"
         ],
         "title": "OrGroupOut",
+        "type": "object"
+      },
+      "OrOptionOut": {
+        "properties": {
+          "can_take_now": {
+            "description": "Đã đủ điều kiện học lựa chọn này ngay",
+            "title": "Can Take Now",
+            "type": "boolean"
+          },
+          "course_code": {
+            "title": "Course Code",
+            "type": "string"
+          },
+          "course_name": {
+            "title": "Course Name",
+            "type": "string"
+          },
+          "missing_courses": {
+            "description": "Mã các môn còn thiếu để học được lựa chọn này",
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing Courses",
+            "type": "array"
+          }
+        },
+        "required": [
+          "course_code",
+          "course_name",
+          "can_take_now",
+          "missing_courses"
+        ],
+        "title": "OrOptionOut",
         "type": "object"
       },
       "PrerequisiteCheckResponse": {
@@ -274,6 +377,99 @@
           "unmet_or_groups"
         ],
         "title": "PrerequisiteCheckResponse",
+        "type": "object"
+      },
+      "PrerequisiteExplainRequest": {
+        "properties": {
+          "course_id": {
+            "description": "Môn cần giải thích",
+            "exclusiveMinimum": 0.0,
+            "title": "Course Id",
+            "type": "integer"
+          },
+          "student_id": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Chỉ admin được hỏi cho sinh viên khác",
+            "title": "Student Id"
+          }
+        },
+        "required": [
+          "course_id"
+        ],
+        "title": "PrerequisiteExplainRequest",
+        "type": "object"
+      },
+      "PrerequisiteExplainResponse": {
+        "properties": {
+          "course_code": {
+            "title": "Course Code",
+            "type": "string"
+          },
+          "course_id": {
+            "title": "Course Id",
+            "type": "integer"
+          },
+          "course_name": {
+            "title": "Course Name",
+            "type": "string"
+          },
+          "eligible": {
+            "title": "Eligible",
+            "type": "boolean"
+          },
+          "missing": {
+            "items": {
+              "$ref": "#/components/schemas/MissingCourseOut"
+            },
+            "title": "Missing",
+            "type": "array"
+          },
+          "suggested_order": {
+            "description": "Thứ tự học gợi ý cho các môn bắt buộc còn thiếu",
+            "items": {
+              "type": "string"
+            },
+            "title": "Suggested Order",
+            "type": "array"
+          },
+          "total_missing": {
+            "description": "Tổng số môn bắt buộc còn thiếu",
+            "title": "Total Missing",
+            "type": "integer"
+          },
+          "truncated": {
+            "description": "True nếu danh sách bị cắt bớt theo PREREQ_EXPLAIN_MAX_ITEMS",
+            "title": "Truncated",
+            "type": "boolean"
+          },
+          "unmet_or_groups": {
+            "items": {
+              "$ref": "#/components/schemas/OrGroupExplainOut"
+            },
+            "title": "Unmet Or Groups",
+            "type": "array"
+          }
+        },
+        "required": [
+          "course_id",
+          "course_code",
+          "course_name",
+          "eligible",
+          "missing",
+          "unmet_or_groups",
+          "suggested_order",
+          "total_missing",
+          "truncated"
+        ],
+        "title": "PrerequisiteExplainResponse",
         "type": "object"
       },
       "RefreshRequest": {
@@ -939,6 +1135,15 @@
             },
             "description": "Successful Response"
           },
+          "401": {
+            "description": "UNAUTHENTICATED / TOKEN_EXPIRED"
+          },
+          "403": {
+            "description": "FORBIDDEN: sinh viên hỏi cho người khác"
+          },
+          "404": {
+            "description": "NOT_FOUND: môn học không tồn tại"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -948,9 +1153,83 @@
               }
             },
             "description": "Validation Error"
+          },
+          "429": {
+            "description": "RATE_LIMITED"
           }
         },
         "summary": "Check Prerequisites",
+        "tags": [
+          "prerequisites"
+        ]
+      }
+    },
+    "/api/v1/prerequisites/explain": {
+      "post": {
+        "operationId": "explain_prerequisites_api_v1_prerequisites_explain_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PrerequisiteExplainRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrerequisiteExplainResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "UNAUTHENTICATED / TOKEN_EXPIRED"
+          },
+          "403": {
+            "description": "FORBIDDEN: sinh viên hỏi cho người khác"
+          },
+          "404": {
+            "description": "NOT_FOUND: môn học không tồn tại"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "description": "RATE_LIMITED"
+          }
+        },
+        "summary": "Explain Prerequisites",
         "tags": [
           "prerequisites"
         ]

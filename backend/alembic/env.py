@@ -5,15 +5,17 @@ Thứ tự ưu tiên chọn URL:
   2. biến ALEMBIC_DATABASE_URL (dùng cho test/tải nếu cần)
   3. biến DATABASE_URL (mặc định, lấy từ .env)
 """
+
 import asyncio
 import os
 from logging.config import fileConfig
 
-from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
+from alembic import context
+from app.core.config import get_settings
 from app.models import Base
 
 config = context.config
@@ -28,9 +30,12 @@ def get_url() -> str:
         context.get_x_argument(as_dictionary=True).get("dburl")
         or os.environ.get("ALEMBIC_DATABASE_URL")
         or os.environ.get("DATABASE_URL")
+        or get_settings().database_url
     )
     if not url:
-        raise RuntimeError("Chưa có URL database: đặt DATABASE_URL (hoặc dùng -x dburl=...)")
+        raise RuntimeError(
+            "Chưa có URL database: đặt DATABASE_URL (hoặc dùng -x dburl=...)"
+        )
     return url
 
 
@@ -48,7 +53,9 @@ def run_migrations_offline() -> None:
 
 
 def do_run_migrations(connection: Connection) -> None:
-    context.configure(connection=connection, target_metadata=target_metadata, compare_type=True)
+    context.configure(
+        connection=connection, target_metadata=target_metadata, compare_type=True
+    )
     with context.begin_transaction():
         context.run_migrations()
 

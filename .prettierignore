@@ -1,0 +1,30 @@
+# Dependencies and output
+node_modules/
+dist/
+.vite/
+.venv/
+.pytest_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+
+# Backend and non-frontend folders
+backend/
+ban_giao/
+chitietcongviec/
+docker/
+docs/
+nginx/
+M1_Frontend\ Web\ Developer/
+M1_Frontend*
+
+# Large or auto-generated files
+package-lock.json
+public/mockServiceWorker.js
+*.py
+*.pyc
+*.md
+*.sh
+*.yml
+*.yaml
+
