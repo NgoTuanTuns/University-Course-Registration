@@ -9,7 +9,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint .",
-    "format": "prettier --write src"
+    "format": "prettier --write ."
   },
   "dependencies": {
     "react": "18.3.1",
