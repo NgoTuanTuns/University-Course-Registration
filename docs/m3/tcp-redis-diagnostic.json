@@ -1,0 +1,31 @@
+{
+  "scope": "loopback TCP HTTP to owned uvicorn; synthetic students; no nginx or login load",
+  "redis_lock": true,
+  "db_pool_size": 5,
+  "db_max_overflow": 10,
+  "rounds": [
+    {
+      "requests": 2000,
+      "arrival_window_sec": 30,
+      "last_arrival_sec": 29.959,
+      "elapsed_sec": 31.556,
+      "http_statuses": {
+        "409": 1998,
+        "201": 1,
+        "200": 1
+      },
+      "transport_errors": 0,
+      "transport_error_types": {},
+      "business_errors": {
+        "CONCURRENT_UPDATE": 1898,
+        "WAITLIST_FULL": 100
+      },
+      "p50_ms": 1664.48,
+      "p95_ms": 1834.93,
+      "invariant_violations_before_cancel": 0,
+      "invariant_violations_after_cancel": 0,
+      "promoted_correctly": true,
+      "passed": true
+    }
+  ]
+}

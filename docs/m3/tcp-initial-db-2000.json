@@ -1,0 +1,73 @@
+{
+  "scope": "loopback TCP HTTP to owned uvicorn; synthetic students; no nginx or login load",
+  "redis_lock": false,
+  "db_pool_size": 5,
+  "db_max_overflow": 10,
+  "rounds": [
+    {
+      "requests": 2000,
+      "arrival_window_sec": 30,
+      "last_arrival_sec": 29.962,
+      "elapsed_sec": 45.608,
+      "http_statuses": {
+        "409": 1998,
+        "200": 1,
+        "201": 1
+      },
+      "transport_errors": 0,
+      "business_errors": {
+        "WAITLIST_FULL": 1998
+      },
+      "p50_ms": 10713.64,
+      "p95_ms": 15077.39,
+      "invariant_violations_before_cancel": 0,
+      "invariant_violations_after_cancel": 0,
+      "promoted_correctly": true,
+      "passed": true
+    },
+    {
+      "requests": 2000,
+      "arrival_window_sec": 30,
+      "last_arrival_sec": 30.926,
+      "elapsed_sec": 56.139,
+      "http_statuses": {
+        "409": 1995,
+        "201": 1,
+        "200": 1,
+        "500": 3
+      },
+      "transport_errors": 0,
+      "business_errors": {
+        "WAITLIST_FULL": 1995
+      },
+      "p50_ms": 17458.46,
+      "p95_ms": 41959.52,
+      "invariant_violations_before_cancel": 0,
+      "invariant_violations_after_cancel": 0,
+      "promoted_correctly": true,
+      "passed": false
+    },
+    {
+      "requests": 2000,
+      "arrival_window_sec": 30,
+      "last_arrival_sec": 29.991,
+      "elapsed_sec": 50.105,
+      "http_statuses": {
+        "409": 1977,
+        "201": 1,
+        "200": 1,
+        "500": 21
+      },
+      "transport_errors": 0,
+      "business_errors": {
+        "WAITLIST_FULL": 1977
+      },
+      "p50_ms": 15182.97,
+      "p95_ms": 19819.07,
+      "invariant_violations_before_cancel": 0,
+      "invariant_violations_after_cancel": 0,
+      "promoted_correctly": true,
+      "passed": false
+    }
+  ]
+}

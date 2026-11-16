@@ -1,5 +1,16 @@
 # Demo và bảo vệ M3
 
+## Kiểm chứng bổ sung ngày 16/11/2026
+
+Đối chiếu đầy đủ theo tuần tại `ban_giao/M3/DOI_CHIEU_M3_2026-11-16.md`. Harness HTTP thật dưới đây chỉ mở tiến trình uvicorn cục bộ do chính công cụ quản lý; không gửi tải tới URL bên ngoài. Phải dùng `APP_ENV=test`, `DATABASE_URL` trỏ PostgreSQL local với database `course_reg_test`, `TEST_REDIS_URL` trỏ Redis database 1. Không chạy cùng lúc với pytest vì fixture dọn test DB.
+
+```powershell
+python -m app.tools.m3_network_benchmark --students 2000 --window 30 --rounds 3 --output ../docs/m3/tcp-db-2000.json
+python -m app.tools.m3_network_benchmark --students 2000 --window 30 --rounds 3 --redis-lock --output ../docs/m3/tcp-redis-2000.json
+```
+
+Đây là 2.000 sinh viên giả, mỗi người một JWT và một POST enroll, đến đều trong 30 giây, tranh một lớp 1 chỗ. Báo cáo có phân loại 409, P50/P95, kiểm tra invariant trước/sau hủy, đôn người chờ và dọn dữ liệu công cụ tạo. Chưa thay workload Locust qua login/search/prerequisite/Nginx của M5. Một tệp kết quả thất bại không được coi là nghiệm thu; công cụ trả exit khác 0 khi invariant, HTTP hoặc đôn sai.
+
 ## Chạy từ checkout
 
 Tại thư mục gốc: sao chép `.env.example` thành `.env` nếu chưa có, rồi `docker compose -p cnpm-m3 up -d db redis`. Trên máy này các dịch vụ đã chạy ở cổng PostgreSQL 5433, Redis 6380. Không dùng cổng nginx 8080 vì đang có ứng dụng khác sử dụng.

@@ -1,0 +1,85 @@
+{
+  "scope": "loopback TCP HTTP to owned uvicorn; synthetic students; no nginx or login load",
+  "redis_lock": true,
+  "db_pool_size": 5,
+  "db_max_overflow": 10,
+  "rounds": [
+    {
+      "requests": 2000,
+      "http_attempts": 2000,
+      "network_retries": {},
+      "arrival_window_sec": 30,
+      "last_arrival_sec": 29.973,
+      "elapsed_sec": 32.48,
+      "http_statuses": {
+        "201": 1,
+        "409": 1998,
+        "200": 1
+      },
+      "transport_errors": 0,
+      "transport_error_types": {},
+      "business_errors": {
+        "CONCURRENT_UPDATE": 1781,
+        "WAITLIST_FULL": 217
+      },
+      "p50_ms": 2408.45,
+      "p95_ms": 9070.39,
+      "invariant_violations_before_cancel": 0,
+      "invariant_violations_after_cancel": 0,
+      "promoted_correctly": true,
+      "passed": true
+    },
+    {
+      "requests": 2000,
+      "http_attempts": 2003,
+      "network_retries": {
+        "ReadError": 3
+      },
+      "arrival_window_sec": 30,
+      "last_arrival_sec": 29.992,
+      "elapsed_sec": 32.268,
+      "http_statuses": {
+        "201": 1,
+        "409": 1998,
+        "200": 1
+      },
+      "transport_errors": 0,
+      "transport_error_types": {},
+      "business_errors": {
+        "WAITLIST_FULL": 198,
+        "CONCURRENT_UPDATE": 1800
+      },
+      "p50_ms": 3320.64,
+      "p95_ms": 8848.04,
+      "invariant_violations_before_cancel": 0,
+      "invariant_violations_after_cancel": 0,
+      "promoted_correctly": true,
+      "passed": true
+    },
+    {
+      "requests": 2000,
+      "http_attempts": 2000,
+      "network_retries": {},
+      "arrival_window_sec": 30,
+      "last_arrival_sec": 29.975,
+      "elapsed_sec": 32.63,
+      "http_statuses": {
+        "201": 1,
+        "409": 1998,
+        "200": 1
+      },
+      "transport_errors": 0,
+      "transport_error_types": {},
+      "business_errors": {
+        "CONCURRENT_UPDATE": 1810,
+        "WAITLIST_FULL": 188
+      },
+      "p50_ms": 3837.06,
+      "p95_ms": 9144.31,
+      "invariant_violations_before_cancel": 0,
+      "invariant_violations_after_cancel": 0,
+      "promoted_correctly": true,
+      "passed": true
+    }
+  ]
+}

@@ -1,0 +1,82 @@
+{
+  "scope": "loopback TCP HTTP to owned uvicorn; synthetic students; no nginx or login load",
+  "redis_lock": false,
+  "db_pool_size": 5,
+  "db_max_overflow": 10,
+  "rounds": [
+    {
+      "requests": 2000,
+      "http_attempts": 2000,
+      "network_retries": {},
+      "arrival_window_sec": 30,
+      "last_arrival_sec": 30.219,
+      "elapsed_sec": 34.637,
+      "http_statuses": {
+        "201": 1,
+        "409": 1998,
+        "200": 1
+      },
+      "transport_errors": 0,
+      "transport_error_types": {},
+      "business_errors": {
+        "WAITLIST_FULL": 1935,
+        "CONCURRENT_UPDATE": 63
+      },
+      "p50_ms": 867.14,
+      "p95_ms": 2545.33,
+      "invariant_violations_before_cancel": 0,
+      "invariant_violations_after_cancel": 0,
+      "promoted_correctly": true,
+      "passed": true
+    },
+    {
+      "requests": 2000,
+      "http_attempts": 2000,
+      "network_retries": {},
+      "arrival_window_sec": 30,
+      "last_arrival_sec": 30.052,
+      "elapsed_sec": 31.868,
+      "http_statuses": {
+        "409": 1998,
+        "201": 1,
+        "200": 1
+      },
+      "transport_errors": 0,
+      "transport_error_types": {},
+      "business_errors": {
+        "WAITLIST_FULL": 1988,
+        "CONCURRENT_UPDATE": 10
+      },
+      "p50_ms": 819.82,
+      "p95_ms": 1531.61,
+      "invariant_violations_before_cancel": 0,
+      "invariant_violations_after_cancel": 0,
+      "promoted_correctly": true,
+      "passed": true
+    },
+    {
+      "requests": 2000,
+      "http_attempts": 2000,
+      "network_retries": {},
+      "arrival_window_sec": 30,
+      "last_arrival_sec": 30.027,
+      "elapsed_sec": 33.946,
+      "http_statuses": {
+        "409": 1998,
+        "201": 1,
+        "200": 1
+      },
+      "transport_errors": 0,
+      "transport_error_types": {},
+      "business_errors": {
+        "WAITLIST_FULL": 1998
+      },
+      "p50_ms": 792.51,
+      "p95_ms": 4504.39,
+      "invariant_violations_before_cancel": 0,
+      "invariant_violations_after_cancel": 0,
+      "promoted_correctly": true,
+      "passed": true
+    }
+  ]
+}
