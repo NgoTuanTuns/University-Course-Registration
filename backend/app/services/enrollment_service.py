@@ -136,20 +136,40 @@ async def cached_result(key: str | None) -> dict | None:
     try:
         async with asyncio.timeout(0.3):
             raw = await get_redis().get(key)
-        return json.loads(raw) if raw else None
+        result = json.loads(raw) if raw else None
+        if (
+            not isinstance(result, dict)
+            or not {"id", "offering_id", "status"} <= result.keys()
+        ):
+            return None
+        if result["status"] not in {"ACTIVE", "WAITLISTED"}:
+            return None
+        return result
     except (RedisError, OSError, TimeoutError, ValueError):
         return None
 
 
-async def cache_result(key: str | None, result: dict) -> None:
+async def cache_result(
+    key: str | None, result: dict, *, committed: bool = False
+) -> None:
     if key:
         try:
             async with asyncio.timeout(0.3):
-                await get_redis().set(
-                    key,
-                    json.dumps(result),
-                    ex=get_settings().enrollment_idempotency_ttl_sec,
-                )
+                ttl = get_settings().enrollment_idempotency_ttl_sec
+                if committed:
+                    # A delayed finalizer must not replace a newer value after
+                    # expiration/reuse of the key by another transaction.
+                    await get_redis().eval(
+                        "if redis.call('get',KEYS[1]) == ARGV[1] then "
+                        "return redis.call('set',KEYS[1],ARGV[2],'EX',ARGV[3]) end return 0",
+                        1,
+                        key,
+                        json.dumps(result),
+                        json.dumps(result | {"_committed": True}),
+                        ttl,
+                    )
+                else:
+                    await get_redis().set(key, json.dumps(result), ex=ttl)
         except (RedisError, OSError, TimeoutError):
             pass
 
@@ -159,9 +179,28 @@ async def run_transaction(
 ) -> dict:
     for attempt in range(3):
         try:
+            # Bound pool checkout too: lock_timeout starts only after checkout.
+            # Overload must become a retryable business response, not a pool 500.
+            async with asyncio.timeout(
+                get_settings().enrollment_db_admission_timeout_sec
+            ):
+                await session.execute(
+                    select(
+                        func.set_config(
+                            "lock_timeout",
+                            f"{get_settings().enrollment_db_lock_timeout_ms}ms",
+                            True,
+                        )
+                    )
+                )
             result = await operation()
             await session.commit()
             return result
+        except TimeoutError as exc:
+            await session.rollback()
+            raise api_error(
+                409, "CONCURRENT_UPDATE", "Hệ thống đang bận, hãy thử lại"
+            ) from exc
         except (QueueChanged, DBAPIError) as exc:
             await session.rollback()
             state = getattr(getattr(exc, "orig", None), "sqlstate", None)
@@ -198,12 +237,20 @@ async def enroll(
     # while waiting at the Redis gate. It has no role in business correctness.
     use_gate = False
     if get_settings().enrollment_redis_lock_enabled:
-        async with session.bind.connect() as connection:
-            remaining = await connection.scalar(
-                select(CourseOffering.capacity - CourseOffering.enrolled_count).where(
-                    CourseOffering.id == offering_id
-                )
-            )
+        try:
+            async with asyncio.timeout(
+                get_settings().enrollment_db_admission_timeout_sec
+            ):
+                async with session.bind.connect() as connection:
+                    remaining = await connection.scalar(
+                        select(
+                            CourseOffering.capacity - CourseOffering.enrolled_count
+                        ).where(CourseOffering.id == offering_id)
+                    )
+        except TimeoutError as exc:
+            raise api_error(
+                409, "CONCURRENT_UPDATE", "Hệ thống đang bận, hãy thử lại"
+            ) from exc
         use_gate = (
             remaining is not None and remaining <= get_settings().lock_seat_threshold
         )
@@ -217,7 +264,11 @@ async def enroll(
             # Reject a cache entry published by a transaction that rolled back.
             model = Enrollment if cached["status"] == "ACTIVE" else Waitlist
             persisted = await session.get(model, cached["id"])
-            if persisted is None or persisted.student_id != student_id:
+            if (
+                persisted is None
+                or persisted.student_id != student_id
+                or persisted.offering_id != cached["offering_id"]
+            ):
                 cached = None
         if cached:
             if cached["offering_id"] != offering_id:
@@ -258,7 +309,7 @@ async def enroll(
     async with acquire_offering_lock(offering_id, use_gate):
         result = await run_transaction(session, operation)
         # Preserve the original response even if its waitlist row is later removed.
-        await cache_result(key, result | {"_committed": True})
+        await cache_result(key, result, committed=True)
         return result
 
 
