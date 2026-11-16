@@ -1,5 +1,7 @@
 # M3 — Backend Engineer, Enrollment, Concurrency & Waitlist: Công việc chi tiết 7 tuần coding
 
+
+> Cập nhật 16/11/2026: dấu [x] chỉ xác nhận phần triển khai và kiểm chứng kỹ thuật M3. Các xác nhận liên thành viên, giao diện, tải triển khai và lịch nghiệm thu vẫn để mở. Xem [bảng đối chiếu và bằng chứng](../ban_giao/M3/DOI_CHIEU_M3_2026-11-16.md). Hành vi tạm của tuần 2 đã được thay bằng waitlist thật ở tuần 4.
 **Đề tài:** Hệ thống Đăng ký Học phần & Kiểm tra Điều kiện Tiên quyết
 **Vai trò:** M3 — API đăng ký an toàn khi tranh chấp, trùng lịch, giới hạn tín chỉ, waitlist, tra cứu học phần
 **Căn cứ:** *Báo cáo kế hoạch dự án* (Mục 4.3, 5, 6) và *Quy ước chung của nhóm*.
@@ -90,20 +92,20 @@ Kiểm tra tiên quyết (**chỉ đọc**, có cache) đặt **trước** khi k
 **Mục tiêu:** Có model đúng DDL; `GET /courses` chạy được với 5 bộ lọc; tài liệu thiết kế khóa bản nháp.
 
 ### 1.2 Model `enrollments` và `waitlist`
-- [ ] Viết `models/enrollment.py` và `models/waitlist.py` **đúng từng cột và ràng buộc** ở Mục 6 quy ước: `status` `VARCHAR` + `CHECK` (không dùng ENUM), `version INTEGER NOT NULL DEFAULT 0`, `enrolled_at`/`cancelled_at`/`enqueued_at` là `TIMESTAMPTZ`, `UNIQUE(student_id, offering_id)` của `waitlist`, **chỉ mục duy nhất từng phần** `uq_enrollments_active ... WHERE status = 'ACTIVE'`, các chỉ mục `ix_enrollments_student`, `ix_enrollments_offering`, `ix_waitlist_queue`.
+- [x] Viết `models/enrollment.py` và `models/waitlist.py` **đúng từng cột và ràng buộc** ở Mục 6 quy ước: `status` `VARCHAR` + `CHECK` (không dùng ENUM), `version INTEGER NOT NULL DEFAULT 0`, `enrolled_at`/`cancelled_at`/`enqueued_at` là `TIMESTAMPTZ`, `UNIQUE(student_id, offering_id)` của `waitlist`, **chỉ mục duy nhất từng phần** `uq_enrollments_active ... WHERE status = 'ACTIVE'`, các chỉ mục `ix_enrollments_student`, `ix_enrollments_offering`, `ix_waitlist_queue`.
 - [ ] Chuyển cho **M4** trong 2 ngày đầu để M4 gộp vào **một migration duy nhất** (tránh nhiều đầu Alembic). Nếu M3 chậm, M4 có thể tự viết từ DDL — hai bạn trao đổi trước.
-- [ ] Quyết định cách bảo vệ `version` ở tầng ORM: dùng **`version_id_col`** của SQLAlchemy (tự tăng, ném `StaleDataError` → đổi sang `CONCURRENT_UPDATE`) hay **câu `UPDATE ... WHERE version = :v` viết tường minh** (Mục 1.1(a)). Đề xuất viết tường minh cho thao tác hủy (rõ ràng, dễ giải thích khi bảo vệ).
+- [x] Quyết định cách bảo vệ `version` ở tầng ORM: dùng **`version_id_col`** của SQLAlchemy (tự tăng, ném `StaleDataError` → đổi sang `CONCURRENT_UPDATE`) hay **câu `UPDATE ... WHERE version = :v` viết tường minh** (Mục 1.1(a)). Đề xuất viết tường minh cho thao tác hủy (rõ ràng, dễ giải thích khi bảo vệ).
 
 ### 1.3 `GET /courses` — tra cứu học phần (UR-F-01, SR-F-01)
 - [ ] Chốt tên endpoint và tên tham số với M1 trong 2 ngày đầu (Mục 9, điểm 1). Đề xuất tham số: `term`, `q` (từ khóa trên mã/tên môn), `section` (mã lớp), `credits`, `instructor`, `day` + `from` + `to` (khung giờ), `page`, `page_size`. `term` mặc định là kỳ mới nhất trong DB.
-- [ ] **Lọc đồng thời trên đúng 5 trường** (từ khóa, mã lớp, tín chỉ, giảng viên, khung giờ); các tham số bỏ trống thì không lọc.
-- [ ] Ngữ nghĩa lọc khung giờ (ghi rõ trong Swagger): lớp **có ít nhất một buổi** vào `day` và nằm trong `[from, to]`. Triển khai trên JSONB (`jsonb_array_elements` trong `EXISTS`).
-- [ ] Từ khóa dùng `ILIKE` và **escape ký tự `%`, `_`** do người dùng nhập; không ghép chuỗi SQL.
-- [ ] Sắp xếp ổn định (`code`, `section`) để phân trang không bị lặp/sót; `page_size` tối đa 100 (vượt thì lỗi `422`); trả `{ items, total, page, page_size }`.
-- [ ] Mỗi phần tử gồm: thông tin môn (`code`, `name`, `credits`), thông tin lớp (`id`, `section`, `instructor`, `room`, `schedule`, `capacity`, `enrolled_count`), và đề xuất thêm `my_status` (`ENROLLED`/`WAITLISTED`/`null` cho sinh viên đang đăng nhập) để M1 không cần gọi riêng — cần M1 đồng ý.
-- [ ] **Không để N+1** (tải môn kèm lớp bằng join/eager load); kiểm bằng cách đếm truy vấn trong test.
-- [ ] Kiểm thử: từng bộ lọc riêng, kết hợp nhiều bộ lọc, phân trang, bộ lọc trả rỗng, ký tự đặc biệt trong từ khóa.
-- [ ] Dùng dependency xác thực của M4 (khi M4 chưa xong, dùng cơ chế override giống M2).
+- [x] **Lọc đồng thời trên đúng 5 trường** (từ khóa, mã lớp, tín chỉ, giảng viên, khung giờ); các tham số bỏ trống thì không lọc.
+- [x] Ngữ nghĩa lọc khung giờ (ghi rõ trong Swagger): lớp **có ít nhất một buổi** vào `day` và nằm trong `[from, to]`. Triển khai trên JSONB (`jsonb_array_elements` trong `EXISTS`).
+- [x] Từ khóa dùng `ILIKE` và **escape ký tự `%`, `_`** do người dùng nhập; không ghép chuỗi SQL.
+- [x] Sắp xếp ổn định (`code`, `section`) để phân trang không bị lặp/sót; `page_size` tối đa 100 (vượt thì lỗi `422`); trả `{ items, total, page, page_size }`.
+- [x] Mỗi phần tử gồm: thông tin môn (`code`, `name`, `credits`), thông tin lớp (`id`, `section`, `instructor`, `room`, `schedule`, `capacity`, `enrolled_count`), và đề xuất thêm `my_status` (`ENROLLED`/`WAITLISTED`/`null` cho sinh viên đang đăng nhập) để M1 không cần gọi riêng — cần M1 đồng ý.
+- [x] **Không để N+1** (tải môn kèm lớp bằng join/eager load); kiểm bằng cách đếm truy vấn trong test.
+- [x] Kiểm thử: từng bộ lọc riêng, kết hợp nhiều bộ lọc, phân trang, bộ lọc trả rỗng, ký tự đặc biệt trong từ khóa.
+- [x] Dùng dependency xác thực của M4 (khi M4 chưa xong, dùng cơ chế override giống M2).
 
 ### 1.4 Bản nháp tài liệu thiết kế
 - [ ] Viết `docs/enrollment-design.md` theo Mục 1.1 (các lớp bảo vệ, mức cô lập, thứ tự kiểm tra, thứ tự khóa). Gửi cả nhóm để duyệt.
@@ -128,33 +130,33 @@ Kiểm tra tiên quyết (**chỉ đọc**, có cache) đặt **trước** khi k
 **Mục tiêu:** Đăng ký/hủy chạy **đúng** khi chưa có tranh chấp: kiểm tra tiên quyết, trùng lịch, tín chỉ, sĩ số (UR-F-04, UR-F-05, SR-F-04, SR-F-07).
 
 ### 2.1 Hàm phát hiện trùng lịch (thuần, kiểm thử độc lập)
-- [ ] `find_schedule_conflicts(candidate, existing) -> list[Conflict]` — hàm thuần trong `services/`: cùng `day` và `a.start < b.end && b.start < a.end`; **hai buổi liền nhau (kết thúc 09:30, bắt đầu 09:30) không trùng**; một lớp có nhiều buổi/tuần.
+- [x] `find_schedule_conflicts(candidate, existing) -> list[Conflict]` — hàm thuần trong `services/`: cùng `day` và `a.start < b.end && b.start < a.end`; **hai buổi liền nhau (kết thúc 09:30, bắt đầu 09:30) không trùng**; một lớp có nhiều buổi/tuần.
 - [ ] **Quy tắc nghỉ giữa hai ca** (Mục 4.3 kế hoạch nhắc tới): chốt có áp dụng hay không (Mục 9, điểm 6). Nếu có, đặt số phút trong `.env` (ví dụ `MIN_BREAK_MINUTES`, mặc định `0`) rồi cập nhật `.env.example`; **M1 phải áp dụng cùng quy tắc ở client**.
 - [ ] Tạo **bộ ca kiểm thử dùng chung** (tệp JSON, ví dụ `docs/schedule-test-vectors.json`: trùng hẳn, trùng một phần, liền kề, khác ngày, nhiều buổi) và gửi M1 để Vitest của M1 chạy **cùng bộ ca** — bảo đảm client và server không lệch (tiêu chí nghiệm thu: 0 dương tính/âm tính giả).
-- [ ] Kết quả trả về lớp bị trùng (mã môn, lớp) để M1 tô xung đột.
+- [x] Kết quả trả về lớp bị trùng (mã môn, lớp) để M1 tô xung đột.
 
 ### 2.2 `POST /enroll` — luồng một luồng (chưa tối ưu tranh chấp)
-- [ ] Request: `{ "offering_id": 123 }`; idempotency key gửi qua header `Idempotency-Key` (đề xuất; cần chốt — Mục 9, điểm 2).
-- [ ] Service `enroll(session, student_id, offering_id)` làm lần lượt (Mục 1.1(c)): tồn tại lớp → đã đăng ký → **tiên quyết (`check_eligibility` của M2)** → trùng lịch → tín chỉ → giữ chỗ.
+- [x] Request: `{ "offering_id": 123 }`; idempotency key gửi qua header `Idempotency-Key` (đề xuất; cần chốt — Mục 9, điểm 2).
+- [x] Service `enroll(session, student_id, offering_id)` làm lần lượt (Mục 1.1(c)): tồn tại lớp → đã đăng ký → **tiên quyết (`check_eligibility` của M2)** → trùng lịch → tín chỉ → giữ chỗ.
 - [ ] **Tách bước nhỏ** để mỗi hàm ≤ ~40 dòng: `ensure_not_enrolled`, `ensure_prerequisites`, `ensure_no_schedule_conflict`, `ensure_credit_limit`, `reserve_seat`, `create_enrollment`.
-- [ ] Giữ chỗ bằng `sqlalchemy.update(...).where(enrolled_count < capacity).returning(...)`; trả dòng → tạo `enrollments` (`version = 0`) → `201`.
+- [x] Giữ chỗ bằng `sqlalchemy.update(...).where(enrolled_count < capacity).returning(...)`; trả dòng → tạo `enrollments` (`version = 0`) → `201`.
 - [ ] Không trả dòng (đầy) → **chưa xử lý waitlist trong tuần này**; tạm trả lỗi rõ ràng và để Tuần 4 hoàn thiện (hoặc trả `WAITLISTED` giả lập có cờ cấu hình nếu M1 cần dựng giao diện sớm).
-- [ ] Mọi lỗi nghiệp vụ dùng `HTTPException` với `detail = { code, message, ... }`: `PREREQ_NOT_MET` kèm `missing_courses`; `SCHEDULE_CONFLICT` kèm `conflicts_with` (danh sách `{ offering_id, course_code, section }`); `CREDIT_LIMIT_EXCEEDED` kèm `current_credits`, `max_credits`, `requested_credits` (đề xuất, báo M1).
-- [ ] Chỉ có **một điểm commit** ở tầng service; router không commit.
+- [x] Mọi lỗi nghiệp vụ dùng `HTTPException` với `detail = { code, message, ... }`: `PREREQ_NOT_MET` kèm `missing_courses`; `SCHEDULE_CONFLICT` kèm `conflicts_with` (danh sách `{ offering_id, course_code, section }`); `CREDIT_LIMIT_EXCEEDED` kèm `current_credits`, `max_credits`, `requested_credits` (đề xuất, báo M1).
+- [x] Chỉ có **một điểm commit** ở tầng service; router không commit.
 
 ### 2.3 `DELETE /enroll/{id}` (hủy)
-- [ ] Chỉ chủ sở hữu hủy được; đăng ký của người khác → trả `404` (không để lộ sự tồn tại). Admin có cần quyền hủy hộ không → chốt khi cần.
-- [ ] Hủy bằng câu cập nhật theo `version` (Mục 1.1(a)); thành công → giảm `enrolled_count` (ràng buộc `CHECK` không để âm). Phần **đôn waitlist** để Tuần 4.
-- [ ] Hủy lần hai trên đăng ký đã hủy: xử lý như **thành công lặp lại (idempotent)** và ghi rõ trong Swagger (chốt cùng M1, vì M1 có thể bấm đúp).
+- [x] Chỉ chủ sở hữu hủy được; đăng ký của người khác → trả `404` (không để lộ sự tồn tại). Admin có cần quyền hủy hộ không → chốt khi cần.
+- [x] Hủy bằng câu cập nhật theo `version` (Mục 1.1(a)); thành công → giảm `enrolled_count` (ràng buộc `CHECK` không để âm). Phần **đôn waitlist** để Tuần 4.
+- [x] Hủy lần hai trên đăng ký đã hủy: xử lý như **thành công lặp lại (idempotent)** và ghi rõ trong Swagger (chốt cùng M1, vì M1 có thể bấm đúp).
 
 ### 2.4 `GET /timetable?term=2026-1`
-- [ ] Trả các đăng ký `ACTIVE` của sinh viên trong kỳ kèm thông tin môn/lớp/lịch; **đề xuất thêm `total_credits` và `max_credits`** để M1 dựng thanh tín chỉ mà không cần endpoint riêng (Mục 9, điểm 3). Phối hợp M1 (chủ sở hữu chung).
+- [x] Trả các đăng ký `ACTIVE` của sinh viên trong kỳ kèm thông tin môn/lớp/lịch; **đề xuất thêm `total_credits` và `max_credits`** để M1 dựng thanh tín chỉ mà không cần endpoint riêng (Mục 9, điểm 3). Phối hợp M1 (chủ sở hữu chung).
 - [ ] Router `timetable.py` mới (báo nhóm).
 
 ### 2.5 Kiểm thử
-- [ ] Test API (`httpx` + `pytest-asyncio`) cho từng nhánh lỗi: đã đăng ký, **cùng môn khác lớp**, thiếu tiên quyết, trùng lịch (có và không liền kề), vượt tín chỉ, lớp không tồn tại; đăng ký thành công; hủy rồi đăng ký lại; hủy lớp của người khác.
-- [ ] Test hàm trùng lịch bằng bộ vector dùng chung.
-- [ ] Tính tín chỉ chỉ cộng đăng ký `ACTIVE` **trong cùng kỳ**.
+- [x] Test API (`httpx` + `pytest-asyncio`) cho từng nhánh lỗi: đã đăng ký, **cùng môn khác lớp**, thiếu tiên quyết, trùng lịch (có và không liền kề), vượt tín chỉ, lớp không tồn tại; đăng ký thành công; hủy rồi đăng ký lại; hủy lớp của người khác.
+- [x] Test hàm trùng lịch bằng bộ vector dùng chung.
+- [x] Tính tín chỉ chỉ cộng đăng ký `ACTIVE` **trong cùng kỳ**.
 
 ### Sản phẩm bàn giao cuối tuần
 - `POST /enroll`, `DELETE /enroll/{id}`, `GET /timetable` đã merge, đúng nghiệp vụ khi không tranh chấp.
@@ -178,34 +180,34 @@ Kiểm tra tiên quyết (**chỉ đọc**, có cache) đặt **trước** khi k
 **Mục tiêu:** Đăng ký đúng khi **nhiều yêu cầu song song** mà chưa cần Redis lock; tích hợp thật với M1 (SR-F-04, SR-NF-04).
 
 ### 3.1 Khóa theo sinh viên (chống check-then-act)
-- [ ] Đầu transaction (sau bước kiểm tra tiên quyết): `SELECT ... FROM students WHERE id = :student_id FOR UPDATE`. Mọi bước kiểm tra tín chỉ/trùng lịch/trùng đăng ký phải **nằm sau** khóa này.
-- [ ] Giữ transaction **ngắn**: không gọi dịch vụ ngoài trong lúc giữ khóa; đặt `lock_timeout` hợp lý (phối hợp M4) để không chờ vô hạn.
-- [ ] Bắt `IntegrityError` của `uq_enrollments_active` → `ALREADY_ENROLLED`.
+- [x] Đầu transaction (sau bước kiểm tra tiên quyết): `SELECT ... FROM students WHERE id = :student_id FOR UPDATE`. Mọi bước kiểm tra tín chỉ/trùng lịch/trùng đăng ký phải **nằm sau** khóa này.
+- [x] Giữ transaction **ngắn**: không gọi dịch vụ ngoài trong lúc giữ khóa; đặt `lock_timeout` hợp lý (phối hợp M4) để không chờ vô hạn.
+- [x] Bắt `IntegrityError` của `uq_enrollments_active` → `ALREADY_ENROLLED`.
 
 ### 3.2 Optimistic locking
-- [ ] Mọi thao tác **sửa** `enrollments` (hủy; trạng thái khác nếu có) dùng điều kiện `version`; 0 dòng ảnh hưởng → đọc lại: nếu đã `CANCELLED` thì coi là thành công lặp lại, nếu khác thì `409 CONCURRENT_UPDATE`.
-- [ ] Bắt lỗi deadlock/serialization và **thử lại tối đa 3 lần** (Mục 1.1(d)); hết lượt thử → `CONCURRENT_UPDATE`.
+- [x] Mọi thao tác **sửa** `enrollments` (hủy; trạng thái khác nếu có) dùng điều kiện `version`; 0 dòng ảnh hưởng → đọc lại: nếu đã `CANCELLED` thì coi là thành công lặp lại, nếu khác thì `409 CONCURRENT_UPDATE`.
+- [x] Bắt lỗi deadlock/serialization và **thử lại tối đa 3 lần** (Mục 1.1(d)); hết lượt thử → `CONCURRENT_UPDATE`.
 
 ### 3.3 Idempotency (chống double-submit)
-- [ ] Cùng `Idempotency-Key` + cùng sinh viên → trả **đúng kết quả của lần đầu**, không xử lý lại. Lưu vào Redis, ví dụ `idem:enroll:{student_id}:{key}`, hết hạn sau ~10 phút (**khóa Redis mới → cập nhật Mục 7 quy ước**, Mục 9, điểm 8).
-- [ ] Thiếu key → vẫn chạy bình thường (lưới an toàn là chỉ mục duy nhất).
-- [ ] Redis lỗi → bỏ qua cơ chế này, **không** làm hỏng đăng ký (đúng đắn dựa vào DB).
+- [x] Cùng `Idempotency-Key` + cùng sinh viên → trả **đúng kết quả của lần đầu**, không xử lý lại. Lưu vào Redis, ví dụ `idem:enroll:{student_id}:{key}`, hết hạn sau ~10 phút (**khóa Redis mới → cập nhật Mục 7 quy ước**, Mục 9, điểm 8).
+- [x] Thiếu key → vẫn chạy bình thường (lưới an toàn là chỉ mục duy nhất).
+- [x] Redis lỗi → bỏ qua cơ chế này, **không** làm hỏng đăng ký (đúng đắn dựa vào DB).
 
 ### 3.4 Công cụ kiểm tra bất biến
-- [ ] Dùng `find_invariant_violations(session)` do **M5** viết ở Tuần 2 (danh sách bất biến ở file của M5). Nếu chưa có khi cần, tự viết bản tạm và hợp nhất sau. Mọi test tranh chấp phải gọi hàm này sau khi chạy xong.
+- [x] Dùng `find_invariant_violations(session)` do **M5** viết ở Tuần 2 (danh sách bất biến ở file của M5). Nếu chưa có khi cần, tự viết bản tạm và hợp nhất sau. Mọi test tranh chấp phải gọi hàm này sau khi chạy xong.
 
 ### 3.5 Test tranh chấp v1
 Dùng **nhiều session/kết nối thật** (không dùng chung một session), `asyncio.gather`, dữ liệu dựng bằng fixture, cam kết thật (không rollback) rồi dọn bảng:
-- [ ] **50–200 sinh viên khác nhau** cùng đăng ký một lớp **còn 1 chỗ** → đúng 1 `ACTIVE`; `enrolled_count = 1`.
-- [ ] **Một sinh viên bấm đăng ký hai lần** cùng lúc (cùng/khác key) → đúng 1 đăng ký.
-- [ ] **Một sinh viên đăng ký hai lớp khác nhau cùng lúc** khi tín chỉ chỉ đủ cho một → đúng một lớp thành công.
-- [ ] **Một sinh viên đăng ký hai lớp trùng giờ cùng lúc** → đúng một lớp thành công.
-- [ ] **Hủy đồng thời hai lần** cùng một đăng ký → `enrolled_count` chỉ giảm một lần.
+- [x] **50–200 sinh viên khác nhau** cùng đăng ký một lớp **còn 1 chỗ** → đúng 1 `ACTIVE`; `enrolled_count = 1`.
+- [x] **Một sinh viên bấm đăng ký hai lần** cùng lúc (cùng/khác key) → đúng 1 đăng ký.
+- [x] **Một sinh viên đăng ký hai lớp khác nhau cùng lúc** khi tín chỉ chỉ đủ cho một → đúng một lớp thành công.
+- [x] **Một sinh viên đăng ký hai lớp trùng giờ cùng lúc** → đúng một lớp thành công.
+- [x] **Hủy đồng thời hai lần** cùng một đăng ký → `enrolled_count` chỉ giảm một lần.
 
 ### 3.6 Tích hợp
 - [ ] **M1** chuyển sang API thật trong tuần này: chạy cùng M1 các ca đăng ký thành công/trùng lịch/vượt tín chỉ/đã đăng ký/hủy; sửa mọi lệch hợp đồng trong ngày.
-- [ ] **M2:** test chung `PREREQ_NOT_MET` có `missing_courses` đúng với cache bật.
-- [ ] Ghi nhận các thông số đo ban đầu (thời gian xử lý một lần đăng ký) làm cơ sở cho Tuần 5.
+- [x] **M2:** test chung `PREREQ_NOT_MET` có `missing_courses` đúng với cache bật.
+- [x] Ghi nhận các thông số đo ban đầu (thời gian xử lý một lần đăng ký) làm cơ sở cho Tuần 5.
 
 ### Sản phẩm bàn giao cuối tuần
 - Đăng ký/hủy an toàn khi tranh chấp (DB-only); bộ test tranh chấp v1; M1 chạy end-to-end trên API thật.
@@ -224,16 +226,16 @@ Dùng **nhiều session/kết nối thật** (không dùng chung một session),
 **Mục tiêu:** Hàng chờ FIFO công bằng; hủy lớp tự động đôn người kế tiếp trong transaction (UR-F-04, UR-NF-03, SR-F-05, SR-F-06).
 
 ### 4.1 Vào hàng chờ
-- [ ] Khi lớp đầy (câu giữ chỗ không trả dòng): **sau khi đã qua mọi kiểm tra** (tiên quyết, trùng lịch, tín chỉ — nếu không, hàng chờ đầy sinh viên không đủ điều kiện) → thêm vào `waitlist` và trả `200` với `"status": "WAITLISTED"`, `position`.
-- [ ] Giới hạn: `max_waitlist = ceil(capacity × WAITLIST_MAX_RATIO)` (đề xuất `ceil` để mỗi lớp có ít nhất một chỗ chờ — chốt, Mục 9, điểm 7). Vượt → `WAITLIST_FULL`; đã trong hàng → `ALREADY_WAITLISTED`.
-- [ ] Tính `position` **an toàn khi tranh chấp** (không để hai người cùng một vị trí): thao tác trong transaction đang giữ khóa dòng sinh viên **và** khóa dòng lớp (`SELECT ... FOR UPDATE` trên `course_offerings`) khi cần tính vị trí mới.
+- [x] Khi lớp đầy (câu giữ chỗ không trả dòng): **sau khi đã qua mọi kiểm tra** (tiên quyết, trùng lịch, tín chỉ — nếu không, hàng chờ đầy sinh viên không đủ điều kiện) → thêm vào `waitlist` và trả `200` với `"status": "WAITLISTED"`, `position`.
+- [x] Giới hạn: `max_waitlist = ceil(capacity × WAITLIST_MAX_RATIO)` (đề xuất `ceil` để mỗi lớp có ít nhất một chỗ chờ — chốt, Mục 9, điểm 7). Vượt → `WAITLIST_FULL`; đã trong hàng → `ALREADY_WAITLISTED`.
+- [x] Tính `position` **an toàn khi tranh chấp** (không để hai người cùng một vị trí): thao tác trong transaction đang giữ khóa dòng sinh viên **và** khóa dòng lớp (`SELECT ... FOR UPDATE` trên `course_offerings`) khi cần tính vị trí mới.
 - [ ] Chốt với M1: dùng `POST /enroll` tự đưa vào hàng chờ, hay có bước xác nhận riêng qua `POST /waitlist` (Mục 9, điểm 9).
 
 ### 4.2 Các endpoint hàng chờ
-- [ ] `GET /waitlist`: các lớp sinh viên đang chờ, `position`, `enqueued_at`, thông tin lớp.
+- [x] `GET /waitlist`: các lớp sinh viên đang chờ, `position`, `enqueued_at`, thông tin lớp.
 - [ ] `POST /waitlist` (vào hàng chờ tường minh, nếu nhóm chọn cách đó).
-- [ ] **`DELETE /waitlist/{id}`** — M1 có nút "Rời hàng chờ" nhưng hợp đồng gốc chỉ liệt kê `GET/POST`; cần thêm và báo M1/M5 (Mục 9, điểm 10). Sau khi rời, **cập nhật lại `position`** của những người phía sau.
-- [ ] Chỉ chủ sở hữu mới thấy/xóa được dòng của mình.
+- [x] **`DELETE /waitlist/{id}`** — M1 có nút "Rời hàng chờ" nhưng hợp đồng gốc chỉ liệt kê `GET/POST`; cần thêm và báo M1/M5 (Mục 9, điểm 10). Sau khi rời, **cập nhật lại `position`** của những người phía sau.
+- [x] Chỉ chủ sở hữu mới thấy/xóa được dòng của mình.
 
 ### 4.3 Tự động đôn khi hủy (trong cùng transaction)
 Luồng chuẩn trong `waitlist_service.promote_next(...)`, được `cancel` gọi **trước khi commit**:
@@ -243,15 +245,15 @@ Luồng chuẩn trong `waitlist_service.promote_next(...)`, được `cancel` g�
 4. Đủ → giữ chỗ bằng câu cập nhật có điều kiện, tạo `enrollments`, xóa dòng `waitlist`, cập nhật lại `position`.
 5. **Không đủ (ví dụ đã đăng ký lớp khác trùng giờ khi đang chờ — "case sinh viên waitlist bị khóa bởi học phần khác" ở Mục 4.3 kế hoạch):** bỏ qua người này và **xét người kế tiếp**, lặp đến khi đôn được một người hoặc hết hàng.
 - [ ] Cách xử lý người bị bỏ qua cần chốt (Mục 9, điểm 6): **giữ nguyên chỗ trong hàng** (đề xuất — không cần đổi schema; `GET /waitlist` tính thêm `blocked_reason` = `SCHEDULE_CONFLICT`/`CREDIT_LIMIT_EXCEEDED` khi đọc) hay **xóa khỏi hàng**. M1 cần để hiển thị lý do rõ ràng.
-- [ ] Quy tắc công bằng: lớp còn chỗ trống mà hàng chờ chưa đôn kịp → ghi rõ trong tài liệu việc người mới có thể "chen" hay không (đề xuất: được phép vì chỗ thực sự còn trống, nhưng đôn luôn chạy ngay trong transaction hủy nên khoảng hở không đáng kể).
-- [ ] Mỗi lần đôn ghi **log có cấu trúc** (`offering_id`, `student_id`, thời gian chờ) vì bảng không lưu lịch sử đôn — phục vụ báo cáo của M4/M5 (Mục 9, điểm 12).
+- [x] Quy tắc công bằng: lớp còn chỗ trống mà hàng chờ chưa đôn kịp → ghi rõ trong tài liệu việc người mới có thể "chen" hay không (đề xuất: được phép vì chỗ thực sự còn trống, nhưng đôn luôn chạy ngay trong transaction hủy nên khoảng hở không đáng kể).
+- [x] Mỗi lần đôn ghi **log có cấu trúc** (`offering_id`, `student_id`, thời gian chờ) vì bảng không lưu lịch sử đôn — phục vụ báo cáo của M4/M5 (Mục 9, điểm 12).
 
 ### 4.4 Kiểm thử
-- [ ] Đôn đúng thứ tự FIFO (nhiều người chờ, nhiều lần hủy).
-- [ ] Người đầu hàng bị trùng lịch/vượt tín chỉ → bỏ qua, đôn người sau; vị trí được tính lại.
-- [ ] Giới hạn tỷ lệ hàng chờ; vào hàng hai lần; rời hàng và cập nhật `position`.
-- [ ] **Tranh chấp:** hai người cùng hủy lúc lớp có 2 người chờ → cả hai chỗ trống được đôn đúng thứ tự, không đôn trùng một người; hủy và đăng ký trực tiếp cùng lúc vào lớp vừa trống.
-- [ ] Dùng `find_invariant_violations` sau mỗi test (có thêm bất biến về hàng chờ).
+- [x] Đôn đúng thứ tự FIFO (nhiều người chờ, nhiều lần hủy).
+- [x] Người đầu hàng bị trùng lịch/vượt tín chỉ → bỏ qua, đôn người sau; vị trí được tính lại.
+- [x] Giới hạn tỷ lệ hàng chờ; vào hàng hai lần; rời hàng và cập nhật `position`.
+- [x] **Tranh chấp:** hai người cùng hủy lúc lớp có 2 người chờ → cả hai chỗ trống được đôn đúng thứ tự, không đôn trùng một người; hủy và đăng ký trực tiếp cùng lúc vào lớp vừa trống.
+- [x] Dùng `find_invariant_violations` sau mỗi test (có thêm bất biến về hàng chờ).
 
 ### Sản phẩm bàn giao cuối tuần
 - Waitlist chạy end-to-end với M1; hủy tự động đôn đúng FIFO; bộ test hàng chờ.
@@ -270,23 +272,23 @@ Luồng chuẩn trong `waitlist_service.promote_next(...)`, được `cancel` g�
 **Mục tiêu:** Chịu được spike (2.000 sinh viên trong 30 giây) mà vẫn đúng 100% sĩ số (SR-NF-04, SR-NF-05).
 
 ### 5.1 Khóa phân tán Redis
-- [ ] Hàm `acquire_offering_lock(offering_id)` dùng `SET lock:offering:{id} <token> NX PX 5000`; **giải phóng bằng so sánh token** (script Lua "xóa nếu đúng token") để không xóa nhầm khóa của người khác.
-- [ ] Chờ khóa có giới hạn (thử lại với độ trễ ngẫu nhiên, tổng tối đa ~1–2 giây); hết giờ → `CONCURRENT_UPDATE` (M1 sẽ tự thử lại một lần).
-- [ ] Khóa chỉ là **lớp bảo vệ thêm**: Redis sập/không lấy được → bỏ qua khóa và dựa hoàn toàn vào DB (câu cập nhật có điều kiện + khóa sinh viên). Đúng đắn **không bao giờ** phụ thuộc Redis.
-- [ ] **Dùng có điều kiện ("fallback cho cao điểm" như kế hoạch):** chỉ lấy khóa khi lớp sắp đầy hoặc đang có tranh chấp cao; số ngưỡng đặt trong `.env` (ví dụ `LOCK_SEAT_THRESHOLD`) và đo bằng benchmark. Nếu thêm biến, cập nhật `.env.example`.
-- [ ] Thứ tự khóa luôn là: Redis lock lớp → dòng `students` → dòng `course_offerings` (Mục 1.1(d)).
+- [x] Hàm `acquire_offering_lock(offering_id)` dùng `SET lock:offering:{id} <token> NX PX 5000`; **giải phóng bằng so sánh token** (script Lua "xóa nếu đúng token") để không xóa nhầm khóa của người khác.
+- [x] Chờ khóa có giới hạn (thử lại với độ trễ ngẫu nhiên, tổng tối đa ~1–2 giây); hết giờ → `CONCURRENT_UPDATE` (M1 sẽ tự thử lại một lần).
+- [x] Khóa chỉ là **lớp bảo vệ thêm**: Redis sập/không lấy được → bỏ qua khóa và dựa hoàn toàn vào DB (câu cập nhật có điều kiện + khóa sinh viên). Đúng đắn **không bao giờ** phụ thuộc Redis.
+- [x] **Dùng có điều kiện ("fallback cho cao điểm" như kế hoạch):** chỉ lấy khóa khi lớp sắp đầy hoặc đang có tranh chấp cao; số ngưỡng đặt trong `.env` (ví dụ `LOCK_SEAT_THRESHOLD`) và đo bằng benchmark. Nếu thêm biến, cập nhật `.env.example`.
+- [x] Thứ tự khóa luôn là: Redis lock lớp → dòng `students` → dòng `course_offerings` (Mục 1.1(d)).
 
 ### 5.2 Tối ưu theo số liệu
 - [ ] Đọc báo cáo spike test lần đầu của M5 (Tuần 4): chỗ nào chậm, lỗi 5xx, `CONCURRENT_UPDATE` nhiều, hết connection.
 - [ ] Rà **connection pool** của SQLAlchemy (`pool_size`, `max_overflow`, `pool_timeout`) và `max_connections` của Postgres; phối hợp M4 (DB) và M5 (số worker uvicorn).
-- [ ] Phân tích "điểm nóng" `enrolled_count` (nhiều yêu cầu cùng cập nhật một dòng lớp): so sánh có/không có Redis lock.
-- [ ] Rút ngắn transaction: tiên quyết (cache) và các kiểm tra chỉ đọc làm trước; chỉ giữ khóa cho phần ghi.
+- [x] Phân tích "điểm nóng" `enrolled_count` (nhiều yêu cầu cùng cập nhật một dòng lớp): so sánh có/không có Redis lock.
+- [x] Rút ngắn transaction: tiên quyết (cache) và các kiểm tra chỉ đọc làm trước; chỉ giữ khóa cho phần ghi.
 - [ ] (Tùy chọn, chỉ khi số liệu cho thấy cần) bộ đếm chỗ trống trong Redis để từ chối nhanh các yêu cầu chắc chắn không còn chỗ; **sự thật luôn nằm ở DB**, bộ đếm lệch chỉ làm từ chối nhầm sớm/muộn chứ không làm sai sĩ số — phải có cơ chế đồng bộ lại. Nếu làm, đặt tên khóa mới và cập nhật quy ước.
 
 ### 5.3 Kiểm thử
-- [ ] Chạy lại toàn bộ test tranh chấp (Tuần 3, 4) **với Redis lock bật và tắt**.
-- [ ] Redis bị tắt giữa chừng → vẫn đúng; khóa hết hạn khi transaction còn chạy (giả lập bằng TTL ngắn) → vẫn đúng nhờ DB.
-- [ ] Hai request cùng lấy khóa → chỉ một người giữ; release bằng sai token không xóa khóa của người khác.
+- [x] Chạy lại toàn bộ test tranh chấp (Tuần 3, 4) **với Redis lock bật và tắt**.
+- [x] Redis bị tắt giữa chừng → vẫn đúng; khóa hết hạn khi transaction còn chạy (giả lập bằng TTL ngắn) → vẫn đúng nhờ DB.
+- [x] Hai request cùng lấy khóa → chỉ một người giữ; release bằng sai token không xóa khóa của người khác.
 
 ### 5.4 Đo lại
 - [ ] Chạy lại spike test cùng M5; ghi **số liệu trước/sau** (P95, tỷ lệ lỗi, tỷ lệ ghi đúng sĩ số, số `CONCURRENT_UPDATE`) cho báo cáo.
@@ -329,10 +331,10 @@ Bảng ca nghiệm thu (làm chung với M5, mọi ca gọi `find_invariant_viol
 - [ ] Đưa vào CI; **thất bại → chặn merge**.
 
 ### 6.2 Đóng băng và dọn dẹp
-- [ ] Chỉ sửa lỗi, không thêm tính năng; `ruff` sạch; hàm công khai có type hint; **không còn `print`**.
-- [ ] Rà comment ở chỗ khó: thứ tự khóa, câu cập nhật có điều kiện, đôn trong transaction, thử lại deadlock.
-- [ ] Contract test: phản hồi `/courses`, `/enroll`, `/waitlist`, `/timetable` khớp OpenAPI đã đóng băng.
-- [ ] Hoàn thiện `docs/enrollment-design.md` thành **tài liệu quyết định thiết kế**: so sánh optimistic và pessimistic, lý do chọn tổ hợp hiện tại, các lớp bảo vệ, thứ tự khóa, số liệu tải, các cách đã loại bỏ và lý do.
+- [x] Chỉ sửa lỗi, không thêm tính năng; `ruff` sạch; hàm công khai có type hint; **không còn `print`**.
+- [x] Rà comment ở chỗ khó: thứ tự khóa, câu cập nhật có điều kiện, đôn trong transaction, thử lại deadlock.
+- [x] Contract test: phản hồi `/courses`, `/enroll`, `/waitlist`, `/timetable` khớp OpenAPI đã đóng băng.
+- [x] Hoàn thiện `docs/enrollment-design.md` thành **tài liệu quyết định thiết kế**: so sánh optimistic và pessimistic, lý do chọn tổ hợp hiện tại, các lớp bảo vệ, thứ tự khóa, số liệu tải, các cách đã loại bỏ và lý do.
 - [ ] Chạy từ máy sạch: `docker compose up` → migrate → seed → thử toàn bộ luồng.
 - [ ] Hỗ trợ M1/M5 chạy E2E smoke (đăng ký → lớp đầy → waitlist → hủy → được đôn).
 
@@ -350,24 +352,24 @@ Bảng ca nghiệm thu (làm chung với M5, mọi ca gọi `find_invariant_viol
 ## Tuần 7 (Tuần 9 kế hoạch) — Bảo vệ: slide concurrency, demo, trả lời câu hỏi
 
 ### 7.1 Slide phần đăng ký & tranh chấp (gợi ý)
-- [ ] Bài toán tranh suất; vì sao `version` không đủ để giữ sĩ số.
-- [ ] Các lớp bảo vệ: câu cập nhật có điều kiện, khóa dòng sinh viên, optimistic `version`, idempotency, Redis lock — mỗi lớp chống lỗi nào.
-- [ ] So sánh optimistic và pessimistic, lý do chọn.
-- [ ] Luồng hủy + đôn waitlist trong một transaction; thứ tự khóa chống deadlock.
-- [ ] Bộ test tranh chấp (T1–T12) và kết quả spike test (số liệu trước/sau).
+- [x] Bài toán tranh suất; vì sao `version` không đủ để giữ sĩ số.
+- [x] Các lớp bảo vệ: câu cập nhật có điều kiện, khóa dòng sinh viên, optimistic `version`, idempotency, Redis lock — mỗi lớp chống lỗi nào.
+- [x] So sánh optimistic và pessimistic, lý do chọn.
+- [x] Luồng hủy + đôn waitlist trong một transaction; thứ tự khóa chống deadlock.
+- [x] Bộ test tranh chấp (T1–T12) và kết quả spike test (số liệu trước/sau).
 
 ### 7.2 Kịch bản demo (3–4 phút)
-- [ ] Lớp còn 1 chỗ: chạy kịch bản song song (script) cho thấy đúng 1 người vào, còn lại vào hàng chờ; hiển thị `enrolled_count` khớp.
+- [x] Lớp còn 1 chỗ: chạy kịch bản song song (script) cho thấy đúng 1 người vào, còn lại vào hàng chờ; hiển thị `enrolled_count` khớp.
 - [ ] Một người hủy → người đầu hàng được đôn (xem trên giao diện của M1).
-- [ ] Hiện kết quả công cụ kiểm tra bất biến (không vi phạm).
+- [x] Hiện kết quả công cụ kiểm tra bất biến (không vi phạm).
 - [ ] Phương án dự phòng: video/ảnh chụp; dữ liệu demo cố định của M4; diễn tập ≥ 2 lần.
 
 ### 7.3 Chuẩn bị trả lời câu hỏi
-- [ ] Vì sao không chỉ dùng Redis lock? (DB mới là nguồn đúng đắn; lock chỉ giảm tải)
-- [ ] Redis sập thì sao? Hai yêu cầu cùng một sinh viên thì sao?
-- [ ] Vì sao `READ COMMITTED` mà vẫn đúng? Làm sao tránh deadlock khi đôn?
-- [ ] Người đầu hàng chờ không còn đủ điều kiện thì sao? Hàng chờ có công bằng không?
-- [ ] Làm sao chứng minh "không race condition"? (bộ test T1–T12, kiểm tra bất biến, spike test)
+- [x] Vì sao không chỉ dùng Redis lock? (DB mới là nguồn đúng đắn; lock chỉ giảm tải)
+- [x] Redis sập thì sao? Hai yêu cầu cùng một sinh viên thì sao?
+- [x] Vì sao `READ COMMITTED` mà vẫn đúng? Làm sao tránh deadlock khi đôn?
+- [x] Người đầu hàng chờ không còn đủ điều kiện thì sao? Hàng chờ có công bằng không?
+- [x] Làm sao chứng minh "không race condition"? (bộ test T1–T12, kiểm tra bất biến, spike test)
 
 ### 7.4 Chốt
 - [ ] Nộp tài liệu quyết định thiết kế vào báo cáo tổng hợp do M5 thu thập; chạy thử lần cuối trên máy demo.

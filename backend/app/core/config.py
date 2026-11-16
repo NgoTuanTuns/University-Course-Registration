@@ -33,6 +33,8 @@ class Settings(BaseSettings):
     enrollment_lock_ttl_ms: int = Field(default=5000, gt=0)
     enrollment_lock_wait_sec: float = Field(default=1.5, gt=0)
     enrollment_idempotency_ttl_sec: int = Field(default=600, gt=0)
+    enrollment_db_lock_timeout_ms: int = Field(default=2000, gt=0)
+    enrollment_db_admission_timeout_sec: float = Field(default=2.0, gt=0)
     prereq_cache_ttl_sec: int = 600
     prereq_graph_cache_ttl_sec: int = 3600
     prereq_graph_lock_ttl_sec: int = 5

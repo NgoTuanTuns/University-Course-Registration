@@ -44,6 +44,10 @@ Deadlock `40P01`, serialization `40001`, lock timeout `55P03` và hàng đổi t
 
 ## Redis và idempotency
 
+Đường lấy kết nối ban đầu của M3 (bao gồm đọc gợi ý sĩ số trước gate) có deadline riêng `ENROLLMENT_DB_ADMISSION_TIMEOUT_SEC=2`. Nếu không lấy được kết nối trong giới hạn, rollback nếu có transaction rồi trả 409 CONCURRENT_UPDATE. Không tự tăng pool hay thay timeout các router M2/M4. Test dùng pool thật chỉ một kết nối, giữ kết nối đó từ request khác để chứng minh cả gate bật/tắt đều trả lỗi thử lại có giới hạn.
+
+Bổ sung 16/11/2026: mỗi lượt transaction M3 đặt `lock_timeout` cục bộ từ `ENROLLMENT_DB_LOCK_TIMEOUT_MS` (mặc định 2000 ms). Hết chờ mã 55P03 rollback và retry có giới hạn; không thay cấu hình DB toàn cục. Cache chỉ được đọc khi có cấu trúc kết quả phù hợp, và cache chưa committed phải khớp student/offering trong DB. Bước đánh dấu committed dùng Lua compare-and-set trên giá trị trước commit để finalizer trễ không ghi đè key đã được dùng lại. Vẫn giữ giới hạn best effort khi Redis mất dữ liệu như phần dưới.
+
 Gate dùng `SET lock:offering:{id} token NX PX 5000`, chờ tối đa 1,5 giây. Redis trả bận đến hết hạn trả CONCURRENT_UPDATE. Redis mất kết nối/timeout chuyển về DB. Release dùng Lua so token, không xóa khóa của chủ mới. Mặc định tắt gate vì chưa có benchmark tải mạng của M5 để quyết định bật.
 
 Key idempotency tối đa 128 ký tự, tách theo sinh viên. Khác offering dùng cùng key trả IDEMPOTENCY_KEY_REUSED. Kết quả thành công được lưu trước commit trong khóa sinh viên để request song song đọc lại được; cache chưa đánh dấu committed chỉ replay khi DB đã có dòng tương ứng. Sau commit đánh dấu kết quả đã xác nhận để replay cả khi hàng chờ sau đó bị xóa/đôn. Redis lỗi hoặc hết TTL: không bảo đảm replay cùng response, nhưng DB vẫn ngăn đăng ký trùng, vượt tín chỉ/lịch/sĩ số. Đây là cache best effort, không phải nhật ký idempotency bền vững qua sự cố Redis/process. Nếu nhóm cần bảo đảm tuyệt đối qua crash ở cửa sổ commit/cache, cần M4 phối hợp bảng idempotency/outbox có migration.

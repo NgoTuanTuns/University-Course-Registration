@@ -1,5 +1,7 @@
 # Bàn giao M3 — Enrollment, Concurrency & Waitlist
 
+**Cập nhật 16/11/2026:** PR #6 đã merge vào main. Bản đối chiếu và bổ sung mới tại [DOI_CHIEU_M3_2026-11-16.md](DOI_CHIEU_M3_2026-11-16.md); số liệu bên dưới được giữ như hồ sơ đợt 08/11, không đại diện lần chạy mới.
+
 Ngày thực hiện: 08/11/2026. Nhánh: `m3-enrollment-waitlist`.
 
 ## Phần đã triển khai
