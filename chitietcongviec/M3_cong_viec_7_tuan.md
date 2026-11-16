@@ -286,7 +286,7 @@ Luồng chuẩn trong `waitlist_service.promote_next(...)`, được `cancel` g�
 - [ ] (Tùy chọn, chỉ khi số liệu cho thấy cần) bộ đếm chỗ trống trong Redis để từ chối nhanh các yêu cầu chắc chắn không còn chỗ; **sự thật luôn nằm ở DB**, bộ đếm lệch chỉ làm từ chối nhầm sớm/muộn chứ không làm sai sĩ số — phải có cơ chế đồng bộ lại. Nếu làm, đặt tên khóa mới và cập nhật quy ước.
 
 ### 5.3 Kiểm thử
-- [ ] Chạy lại toàn bộ test tranh chấp (Tuần 3, 4) **với Redis lock bật và tắt**.
+- [x] Chạy lại toàn bộ test tranh chấp (Tuần 3, 4) **với Redis lock bật và tắt**.
 - [x] Redis bị tắt giữa chừng → vẫn đúng; khóa hết hạn khi transaction còn chạy (giả lập bằng TTL ngắn) → vẫn đúng nhờ DB.
 - [x] Hai request cùng lấy khóa → chỉ một người giữ; release bằng sai token không xóa khóa của người khác.
 
