@@ -66,3 +66,69 @@ class PrerequisiteExplainResponse(BaseModel):
     truncated: bool = Field(
         description="True nếu danh sách bị cắt bớt theo PREREQ_EXPLAIN_MAX_ITEMS"
     )
+
+
+# ---------------------------------------------------------------------------
+# Schemas dành cho API Quản trị Tiên quyết (M4, Tuần 4 - /admin/prereqs)
+# ---------------------------------------------------------------------------
+
+
+class PrereqItemOut(BaseModel):
+    prereq_course_id: int
+    prereq_code: str
+    prereq_name: str
+    credits: int
+    type: Literal["AND", "OR"]
+    group_no: int
+
+
+class OrGroupPrereqOut(BaseModel):
+    group_no: int
+    options: list[PrereqItemOut]
+
+
+class CoursePrereqsResponse(BaseModel):
+    course_id: int
+    course_code: str
+    course_name: str
+    and_prerequisites: list[PrereqItemOut]
+    or_groups: list[OrGroupPrereqOut]
+    items: list[PrereqItemOut]
+
+
+class PrereqEdgeOut(BaseModel):
+    course_id: int
+    course_code: str
+    course_name: str
+    prereq_course_id: int
+    prereq_code: str
+    prereq_name: str
+    type: Literal["AND", "OR"]
+    group_no: int
+
+
+class PrereqCreate(BaseModel):
+    course_id: int = Field(gt=0, description="ID học phần cần điều kiện tiên quyết")
+    prereq_course_id: int = Field(gt=0, description="ID học phần tiên quyết")
+    type: Literal["AND", "OR"] = Field(
+        default="AND", description="Loại điều kiện: AND hoặc OR"
+    )
+    group_no: int = Field(
+        default=0,
+        ge=0,
+        description="Số thứ tự nhóm (0 cho AND, >= 1 cho nhóm OR)",
+    )
+
+
+class PrereqUpdate(BaseModel):
+    type: Literal["AND", "OR"] = Field(description="Loại điều kiện: AND hoặc OR")
+    group_no: int = Field(
+        default=0,
+        ge=0,
+        description="Số thứ tự nhóm (0 cho AND, >= 1 cho nhóm OR)",
+    )
+
+
+class PrereqListResponse(BaseModel):
+    items: list[PrereqEdgeOut]
+    total: int

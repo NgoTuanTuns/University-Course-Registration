@@ -277,6 +277,16 @@ async def main_async(args: argparse.Namespace) -> int:
         args.profile,
         default_max_credits=int(os.environ.get("DEFAULT_MAX_CREDITS", "25")),
     )
+    if getattr(args, "export_users", None):
+        import csv
+
+        with open(args.export_users, "w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(["email", "password", "role", "mssv", "full_name"])
+            for s in ds.students:
+                pw = ADMIN_PASSWORD if s.role == "admin" else STUDENT_PASSWORD
+                writer.writerow([s.email, pw, s.role, s.mssv or "", s.full_name])
+        logger.info("Đã xuất %d tài khoản ra: %s", len(ds.students), args.export_users)
     errors = validate_dataset(
         ds, waitlist_ratio=float(os.environ.get("WAITLIST_MAX_RATIO", "0.2"))
     ) + _check_acyclic(ds)
@@ -305,7 +315,14 @@ async def main_async(args: argparse.Namespace) -> int:
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     parser = argparse.ArgumentParser(description="Nạp dữ liệu mẫu vào PostgreSQL")
-    parser.add_argument("--profile", choices=["minimal", "default"], default="default")
+    parser.add_argument(
+        "--profile", choices=["minimal", "default", "loadtest"], default="default"
+    )
+    parser.add_argument(
+        "--export-users",
+        default=None,
+        help="xuất danh sách tài khoản ra file CSV phục vụ test tải Locust",
+    )
     parser.add_argument(
         "--reset", action="store_true", help="xóa sạch dữ liệu rồi nạp lại"
     )

@@ -567,11 +567,14 @@ def _generated_students(
                 )
 
 
+LOADTEST_STUDENT_COUNT = 2000
+
+
 def build_dataset(
     profile: str = "default", *, default_max_credits: int = 25
 ) -> Dataset:
-    """profile: 'minimal' (chỉ kit, dùng cho test) hoặc 'default' (200 học phần, 1000 sinh viên)."""
-    if profile not in ("minimal", "default"):
+    """profile: 'minimal' (chỉ kit, dùng cho test), 'default' (200 học phần, 1000 sinh viên), hoặc 'loadtest' (2000 sinh viên cho spike test)."""
+    if profile not in ("minimal", "default", "loadtest"):
         raise ValueError(f"profile không hợp lệ: {profile}")
     rng = random.Random(f"{SEED}-{profile}")
     ds = Dataset(profile=profile)
@@ -583,7 +586,10 @@ def build_dataset(
     _add_offerings(ds, rng, include_generated=profile != "minimal")
     _kit_students(ds, default_max_credits)
     if profile != "minimal":
-        _generated_students(ds, rng, default_max_credits, DEFAULT_STUDENT_COUNT)
+        student_count = (
+            LOADTEST_STUDENT_COUNT if profile == "loadtest" else DEFAULT_STUDENT_COUNT
+        )
+        _generated_students(ds, rng, default_max_credits, student_count)
 
     # Admin đặt CUỐI để sv000N có id = N khi nạp theo thứ tự
     ds.students.append(

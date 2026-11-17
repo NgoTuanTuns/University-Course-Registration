@@ -153,6 +153,53 @@
         "title": "CoursePage",
         "type": "object"
       },
+      "CoursePrereqsResponse": {
+        "properties": {
+          "and_prerequisites": {
+            "items": {
+              "$ref": "#/components/schemas/PrereqItemOut"
+            },
+            "title": "And Prerequisites",
+            "type": "array"
+          },
+          "course_code": {
+            "title": "Course Code",
+            "type": "string"
+          },
+          "course_id": {
+            "title": "Course Id",
+            "type": "integer"
+          },
+          "course_name": {
+            "title": "Course Name",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PrereqItemOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "or_groups": {
+            "items": {
+              "$ref": "#/components/schemas/OrGroupPrereqOut"
+            },
+            "title": "Or Groups",
+            "type": "array"
+          }
+        },
+        "required": [
+          "course_id",
+          "course_code",
+          "course_name",
+          "and_prerequisites",
+          "or_groups",
+          "items"
+        ],
+        "title": "CoursePrereqsResponse",
+        "type": "object"
+      },
       "CourseUpdate": {
         "properties": {
           "credits": {
@@ -503,6 +550,27 @@
         "title": "OrGroupOut",
         "type": "object"
       },
+      "OrGroupPrereqOut": {
+        "properties": {
+          "group_no": {
+            "title": "Group No",
+            "type": "integer"
+          },
+          "options": {
+            "items": {
+              "$ref": "#/components/schemas/PrereqItemOut"
+            },
+            "title": "Options",
+            "type": "array"
+          }
+        },
+        "required": [
+          "group_no",
+          "options"
+        ],
+        "title": "OrGroupPrereqOut",
+        "type": "object"
+      },
       "OrOptionOut": {
         "properties": {
           "can_take_now": {
@@ -534,6 +602,185 @@
           "missing_courses"
         ],
         "title": "OrOptionOut",
+        "type": "object"
+      },
+      "PrereqCreate": {
+        "properties": {
+          "course_id": {
+            "description": "ID học phần cần điều kiện tiên quyết",
+            "exclusiveMinimum": 0.0,
+            "title": "Course Id",
+            "type": "integer"
+          },
+          "group_no": {
+            "default": 0,
+            "description": "Số thứ tự nhóm (0 cho AND, >= 1 cho nhóm OR)",
+            "minimum": 0.0,
+            "title": "Group No",
+            "type": "integer"
+          },
+          "prereq_course_id": {
+            "description": "ID học phần tiên quyết",
+            "exclusiveMinimum": 0.0,
+            "title": "Prereq Course Id",
+            "type": "integer"
+          },
+          "type": {
+            "default": "AND",
+            "description": "Loại điều kiện: AND hoặc OR",
+            "enum": [
+              "AND",
+              "OR"
+            ],
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "course_id",
+          "prereq_course_id"
+        ],
+        "title": "PrereqCreate",
+        "type": "object"
+      },
+      "PrereqEdgeOut": {
+        "properties": {
+          "course_code": {
+            "title": "Course Code",
+            "type": "string"
+          },
+          "course_id": {
+            "title": "Course Id",
+            "type": "integer"
+          },
+          "course_name": {
+            "title": "Course Name",
+            "type": "string"
+          },
+          "group_no": {
+            "title": "Group No",
+            "type": "integer"
+          },
+          "prereq_code": {
+            "title": "Prereq Code",
+            "type": "string"
+          },
+          "prereq_course_id": {
+            "title": "Prereq Course Id",
+            "type": "integer"
+          },
+          "prereq_name": {
+            "title": "Prereq Name",
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "AND",
+              "OR"
+            ],
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "course_id",
+          "course_code",
+          "course_name",
+          "prereq_course_id",
+          "prereq_code",
+          "prereq_name",
+          "type",
+          "group_no"
+        ],
+        "title": "PrereqEdgeOut",
+        "type": "object"
+      },
+      "PrereqItemOut": {
+        "properties": {
+          "credits": {
+            "title": "Credits",
+            "type": "integer"
+          },
+          "group_no": {
+            "title": "Group No",
+            "type": "integer"
+          },
+          "prereq_code": {
+            "title": "Prereq Code",
+            "type": "string"
+          },
+          "prereq_course_id": {
+            "title": "Prereq Course Id",
+            "type": "integer"
+          },
+          "prereq_name": {
+            "title": "Prereq Name",
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "AND",
+              "OR"
+            ],
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "prereq_course_id",
+          "prereq_code",
+          "prereq_name",
+          "credits",
+          "type",
+          "group_no"
+        ],
+        "title": "PrereqItemOut",
+        "type": "object"
+      },
+      "PrereqListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PrereqEdgeOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "PrereqListResponse",
+        "type": "object"
+      },
+      "PrereqUpdate": {
+        "properties": {
+          "group_no": {
+            "default": 0,
+            "description": "Số thứ tự nhóm (0 cho AND, >= 1 cho nhóm OR)",
+            "minimum": 0.0,
+            "title": "Group No",
+            "type": "integer"
+          },
+          "type": {
+            "description": "Loại điều kiện: AND hoặc OR",
+            "enum": [
+              "AND",
+              "OR"
+            ],
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "title": "PrereqUpdate",
         "type": "object"
       },
       "PrerequisiteCheckResponse": {
@@ -1454,6 +1701,335 @@
         "summary": "Update Course",
         "tags": [
           "admin-courses"
+        ]
+      }
+    },
+    "/api/v1/admin/prereqs": {
+      "get": {
+        "description": "Lấy danh sách các cạnh tiên quyết trong hệ thống (có thể lọc theo môn học).",
+        "operationId": "list_prerequisites_api_v1_admin_prereqs_get",
+        "parameters": [
+          {
+            "description": "Lọc theo ID học phần (tùy chọn)",
+            "in": "query",
+            "name": "course_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Lọc theo ID học phần (tùy chọn)",
+              "title": "Course Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrereqListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Prerequisites",
+        "tags": [
+          "admin-prereqs"
+        ]
+      },
+      "post": {
+        "description": "Thêm một điều kiện tiên quyết mới.\n\n- Tự động kiểm tra chu trình (DFS): nếu tạo vòng trả 422 PREREQ_CYCLE kèm cycle_path.\n- Dùng PostgreSQL advisory lock để tuần tự hóa hai admin ghi đồng thời.\n- Tự động xóa cache Redis sau khi commit thành công.",
+        "operationId": "create_prerequisite_api_v1_admin_prereqs_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PrereqCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrereqEdgeOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Prerequisite",
+        "tags": [
+          "admin-prereqs"
+        ]
+      }
+    },
+    "/api/v1/admin/prereqs/{course_id}": {
+      "get": {
+        "description": "Lấy danh sách điều kiện tiên quyết của môn học, phân tách rõ nhóm AND và nhóm OR.",
+        "operationId": "get_course_prerequisites_api_v1_admin_prereqs__course_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "course_id",
+            "required": true,
+            "schema": {
+              "title": "Course Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CoursePrereqsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Course Prerequisites",
+        "tags": [
+          "admin-prereqs"
+        ]
+      }
+    },
+    "/api/v1/admin/prereqs/{course_id}/{prereq_course_id}": {
+      "delete": {
+        "description": "Xóa một điều kiện tiên quyết khỏi hệ thống và dọn dẹp cache.",
+        "operationId": "delete_prerequisite_api_v1_admin_prereqs__course_id___prereq_course_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "course_id",
+            "required": true,
+            "schema": {
+              "title": "Course Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "prereq_course_id",
+            "required": true,
+            "schema": {
+              "title": "Prereq Course Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Prerequisite",
+        "tags": [
+          "admin-prereqs"
+        ]
+      },
+      "put": {
+        "description": "Cập nhật loại ràng buộc (AND/OR) hoặc group_no của điều kiện tiên quyết.",
+        "operationId": "update_prerequisite_api_v1_admin_prereqs__course_id___prereq_course_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "course_id",
+            "required": true,
+            "schema": {
+              "title": "Course Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "prereq_course_id",
+            "required": true,
+            "schema": {
+              "title": "Prereq Course Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PrereqUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrereqEdgeOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Prerequisite",
+        "tags": [
+          "admin-prereqs"
         ]
       }
     },

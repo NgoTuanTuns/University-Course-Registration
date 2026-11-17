@@ -37,9 +37,12 @@ async def list_courses(
     count_query = select(func.count()).select_from(Course)
 
     if q:
+        clean_q = (
+            q.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        )
         search_filter = or_(
-            Course.code.ilike(f"%{q.strip()}%"),
-            Course.name.ilike(f"%{q.strip()}%"),
+            Course.code.ilike(f"%{clean_q}%", escape="\\"),
+            Course.name.ilike(f"%{clean_q}%", escape="\\"),
         )
         query = query.where(search_filter)
         count_query = count_query.where(search_filter)
