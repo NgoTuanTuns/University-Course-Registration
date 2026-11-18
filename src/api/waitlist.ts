@@ -1,27 +1,38 @@
-import { ApiError } from "./http";
+import { http } from "./http";
+import type { Offering, Paginated } from "../types";
 
 export interface WaitlistEntry {
   id: number;
   offeringId: number;
   position: number;
   enqueuedAt: string;
+  offering: Offering;
+  blockedReason?: string | null;
 }
 
-// Backend chưa công bố contract waitlist. Các thao tác bị khóa có chủ đích.
-function pending(): never {
-  throw new ApiError(
-    "FEATURE_PENDING",
-    "Chức năng danh sách chờ đang chờ API từ M3.",
-    501,
+interface WaitlistApiItem extends Offering {
+  waitlistId: number;
+  position: number;
+  enqueuedAt: string;
+  blockedReason?: string | null;
+}
+
+export async function getWaitlist(): Promise<Paginated<WaitlistEntry>> {
+  const data = await http<Paginated<WaitlistApiItem>>("/waitlist?page=1&page_size=100");
+  return {
+    ...data,
+    items: data.items.map((item) => ({
+      id: item.waitlistId,
+      offeringId: item.id,
+      position: item.position,
+      enqueuedAt: item.enqueuedAt,
+      blockedReason: item.blockedReason,
+      offering: item,
+    })),
+  };
+}
+export const leaveWaitlist = (waitlistId: number) =>
+  http<{ id: number; offeringId: number; status: string }>(
+    `/waitlist/${waitlistId}`,
+    "DELETE",
   );
-}
-
-export const getWaitlist = (): never => pending();
-export const joinWaitlist = (_offeringId: number): never => {
-  void _offeringId;
-  return pending();
-};
-export const leaveWaitlist = (_waitlistId: number): never => {
-  void _waitlistId;
-  return pending();
-};

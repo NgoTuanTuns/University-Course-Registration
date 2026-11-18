@@ -1,12 +1,65 @@
 import { setupWorker } from "msw/browser";
 import { http, HttpResponse } from "msw";
-import { offerings, registrations, removeRegistration } from "./data";
+import { offerings, registrations, removeRegistration, getStaticOfferings } from "./data";
 import { findConflicts } from "../features/timetable/conflicts";
+
+const mockWaitlist: Array<{ id: number; offeringId: number; position: number; enqueuedAt: string }> = [];
 
 const error = (code: string, status = 409) =>
   HttpResponse.json({ detail: { code, message: code } }, { status });
 
+const adminCourses = getStaticOfferings().map(({ courseId, code, name, credits }) => ({ id: courseId, code, name, credits, description: "" }));
+const adminEdges: Array<{ course_id: number; prereq_course_id: number; type: string; group_no: number }> = [];
+
 export const worker = setupWorker(
+  http.get("/api/v1/admin/courses", ({ request }) => {
+    const params = new URL(request.url).searchParams;
+    const q = (params.get("q") || "").toLowerCase();
+    const page = Number(params.get("page") || 1);
+    const size = Number(params.get("page_size") || 20);
+    const items = adminCourses.filter(c => `${c.code} ${c.name}`.toLowerCase().includes(q));
+    return HttpResponse.json({ items: items.slice((page-1)*size, page*size), total: items.length, page, page_size: size });
+  }),
+  http.post("/api/v1/admin/courses", async ({ request }) => {
+    const body = await request.json() as { code: string; name: string; credits: number; description: string };
+    if (adminCourses.some(c => c.code === body.code)) return error("ALREADY_EXISTS");
+    const item = { ...body, id: Math.max(...adminCourses.map(c => c.id), 0)+1 };
+    adminCourses.push(item); return HttpResponse.json(item, { status: 201 });
+  }),
+  http.put("/api/v1/admin/courses/:id", async ({ request, params }) => {
+    const item = adminCourses.find(c => c.id === Number(params.id));
+    if (!item) return error("NOT_FOUND", 404);
+    Object.assign(item, await request.json()); return HttpResponse.json(item);
+  }),
+  http.delete("/api/v1/admin/courses/:id", ({ params }) => {
+    const index = adminCourses.findIndex(c => c.id === Number(params.id));
+    if (index >= 0) adminCourses.splice(index, 1);
+    return HttpResponse.json({ message: "Đã xóa học phần" });
+  }),
+  http.get("/api/v1/admin/prereqs/:id", ({ params }) => {
+    const course = adminCourses.find(c => c.id === Number(params.id));
+    if (!course) return error("NOT_FOUND", 404);
+    const items = adminEdges.filter(e => e.course_id === course.id).map(e => {
+      const p = adminCourses.find(c => c.id === e.prereq_course_id);
+      return { ...e, prereq_code: p?.code, prereq_name: p?.name, credits: p?.credits };
+    });
+    return HttpResponse.json({ course_id: course.id, course_code: course.code, course_name: course.name, items, and_prerequisites: items.filter(e => e.type === "AND"), or_groups: [...new Set(items.filter(e => e.type === "OR").map(e => e.group_no))].map(group_no => ({ group_no, options: items.filter(e => e.type === "OR" && e.group_no === group_no) })) });
+  }),
+  http.post("/api/v1/admin/prereqs", async ({ request }) => {
+    const edge = await request.json() as typeof adminEdges[number];
+    const reaches = (id: number, seen = new Set<number>()): boolean => {
+      if (id === edge.course_id) return true;
+      if (seen.has(id)) return false; seen.add(id);
+      return adminEdges.filter(e => e.course_id === id).some(e => reaches(e.prereq_course_id, seen));
+    };
+    if (reaches(edge.prereq_course_id)) return error("PREREQ_CYCLE", 422);
+    adminEdges.push(edge); return HttpResponse.json(edge, { status: 201 });
+  }),
+  http.delete("/api/v1/admin/prereqs/:course/:prereq", ({ params }) => {
+    const index = adminEdges.findIndex(e => e.course_id === Number(params.course) && e.prereq_course_id === Number(params.prereq));
+    if (index >= 0) adminEdges.splice(index, 1);
+    return HttpResponse.json({ message: "Đã xóa điều kiện" });
+  }),
   http.post("/api/v1/auth/login", async ({ request }) => {
     const body = (await request.json()) as { email: string; password: string };
     if (!body.email.includes("@") || !body.password)
@@ -136,7 +189,9 @@ export const worker = setupWorker(
   ),
   http.post("/api/v1/enroll", async ({ request }) => {
     const body = (await request.json()) as { offering_id: number };
-    const offering = offerings.find((item) => item.id === body.offering_id);
+    // Course search uses the seeded catalog; use the same source here so an
+    // offering id cannot resolve to a different course in the timetable.
+    const offering = getStaticOfferings().find((item) => item.id === body.offering_id);
     if (!offering) return error("NOT_FOUND", 404);
     if (registrations.some((entry) => entry.offering.id === offering.id))
       return error("ALREADY_ENROLLED");
@@ -147,8 +202,14 @@ export const worker = setupWorker(
       ).length
     )
       return error("SCHEDULE_CONFLICT");
-    if (offering.enrolledCount >= offering.capacity)
-      return HttpResponse.json({ status: "WAITLISTED" });
+    if (offering.enrolledCount >= offering.capacity) {
+      let entry = mockWaitlist.find((item) => item.offeringId === offering.id);
+      if (!entry) {
+        entry = { id: Date.now(), offeringId: offering.id, position: mockWaitlist.length + 1, enqueuedAt: new Date().toISOString() };
+        mockWaitlist.push(entry);
+      }
+      return HttpResponse.json({ id: entry.id, offering_id: offering.id, status: "WAITLISTED", position: entry.position });
+    }
     registrations.push({ id: Date.now(), offering, status: "ACTIVE" });
     offering.enrolledCount += 1;
     return HttpResponse.json({ status: "ACTIVE" }, { status: 201 });
@@ -164,7 +225,10 @@ export const worker = setupWorker(
     removeRegistration(id);
     return new HttpResponse(null, { status: 204 });
   }),
-  http.get("/api/v1/waitlist", () => HttpResponse.json([])),
+  http.get("/api/v1/waitlist", () => HttpResponse.json({
+    items: mockWaitlist.map((entry) => ({ ...getStaticOfferings().find((item) => item.id === entry.offeringId), waitlist_id: entry.id, position: entry.position, enqueued_at: entry.enqueuedAt, blocked_reason: null, my_status: "WAITLISTED" })),
+    total: mockWaitlist.length, page: 1, page_size: 100,
+  })),
   http.post("/api/v1/waitlist", async ({ request }) => {
     const body = (await request.json()) as { offering_id: number };
     const offering = offerings.find((item) => item.id === body.offering_id);
@@ -179,9 +243,12 @@ export const worker = setupWorker(
       { status: 201 },
     );
   }),
-  http.delete("/api/v1/waitlist/:id", () =>
-    HttpResponse.json({ message: "Đã rời danh sách chờ" }),
-  ),
+  http.delete("/api/v1/waitlist/:id", ({ params }) => {
+    const index = mockWaitlist.findIndex((entry) => entry.id === Number(params.id));
+    if (index >= 0) mockWaitlist.splice(index, 1);
+    mockWaitlist.forEach((entry, position) => { entry.position = position + 1; });
+    return HttpResponse.json({ id: Number(params.id), status: "REMOVED" });
+  }),
   http.get("/api/v1/__mock-error/:code", ({ params }) => {
     const code = String(params.code);
     const statuses: Record<string, number> = {

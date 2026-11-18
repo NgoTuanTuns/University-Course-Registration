@@ -147,8 +147,16 @@ export async function http<T>(
       await refreshPromise;
       return http<T>(path, method, body, signal, false, extraHeaders);
     }
+    if (code === "CONCURRENT_UPDATE" && retry) {
+      await new Promise((resolve) => setTimeout(resolve, 80 + Math.random() * 180));
+      return http<T>(path, method, body, signal, false, extraHeaders);
+    }
     const retryAfterHeader = response.headers.get("Retry-After");
     const retryAfter = retryAfterHeader ? Number(retryAfterHeader) : undefined;
+    if (response.status === 429 && retry && retryAfter !== undefined) {
+      await new Promise((resolve) => setTimeout(resolve, Math.min(retryAfter * 1000, 10000)));
+      return http<T>(path, method, body, signal, false, extraHeaders);
+    }
     if (
       response.status === 401 &&
       code === "UNAUTHENTICATED" &&

@@ -16,37 +16,37 @@ export interface AdminCoursePage {
 }
 
 export interface AdminPrereqItem {
-  prereq_course_id: number;
-  prereq_code: string;
-  prereq_name: string;
+  prereqCourseId: number;
+  prereqCode: string;
+  prereqName: string;
   credits: number;
   type: "AND" | "OR";
-  group_no: number;
+  groupNo: number;
 }
 
 export interface AdminOrGroup {
-  group_no: number;
+  groupNo: number;
   options: AdminPrereqItem[];
 }
 
 export interface AdminCoursePrereqsResponse {
-  course_id: number;
-  course_code: string;
-  course_name: string;
-  and_prerequisites: AdminPrereqItem[];
-  or_groups: AdminOrGroup[];
+  courseId: number;
+  courseCode: string;
+  courseName: string;
+  andPrerequisites: AdminPrereqItem[];
+  orGroups: AdminOrGroup[];
   items: AdminPrereqItem[];
 }
 
 export interface AdminPrereqEdge {
-  course_id: number;
-  course_code: string;
-  course_name: string;
-  prereq_course_id: number;
-  prereq_code: string;
-  prereq_name: string;
+  courseId: number;
+  courseCode: string;
+  courseName: string;
+  prereqCourseId: number;
+  prereqCode: string;
+  prereqName: string;
   type: "AND" | "OR";
-  group_no: number;
+  groupNo: number;
 }
 
 export interface AdminPrereqListPage {
@@ -55,15 +55,15 @@ export interface AdminPrereqListPage {
 }
 
 export interface AdminPrereqCreate {
-  course_id: number;
-  prereq_course_id: number;
+  courseId: number;
+  prereqCourseId: number;
   type: "AND" | "OR";
-  group_no?: number;
+  groupNo?: number;
 }
 
 export interface AdminPrereqUpdate {
   type: "AND" | "OR";
-  group_no?: number;
+  groupNo?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -90,7 +90,7 @@ export const getAdminCoursePrerequisites = (courseId: number) =>
   http<AdminCoursePrereqsResponse>(`/admin/prereqs/${courseId}`);
 
 export const listAdminPrerequisites = (courseId?: number) => {
-  const query = courseId ? `?course_id=${courseId}` : "";
+  const query = courseId ? `?courseId=${courseId}` : "";
   return http<AdminPrereqListPage>(`/admin/prereqs${query}`);
 };
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import {
   NavLink,
   Routes,
@@ -54,7 +54,9 @@ export default function App() {
     localStorage.setItem("theme", dark ? "dark" : "light");
   }, [dark]);
   useEffect(() => {
-    if (session && week >= 2) void load();
+    // Timetable is a student resource. Calling it with an admin token can
+    // produce a 403/401 response and incorrectly look like an expired session.
+    if (session?.user.role === "student" && week >= 2) void load();
   }, [session]);
   useEffect(() => {
     const expire = () => {
@@ -157,6 +159,7 @@ export default function App() {
             ...(week >= 2
               ? [["/timetable", "Thời khóa biểu", CalendarDays]]
               : []),
+            ...(week >= 4 ? [["/waitlist", "Danh sách chờ", LayoutDashboard]] : []),
           ].map(([path, label, Icon]) => (
             <NavLink
               key={String(path)}
@@ -168,17 +171,12 @@ export default function App() {
             </NavLink>
           ))}
           {session.user.role === "admin" && (
-            <NavLink to="/admin/courses">
+            <><NavLink to="/admin/courses">
               <ShieldCheck size={19} />
               Quản trị học phần
-            </NavLink>
+            </NavLink><NavLink to="/admin/prereqs"><ShieldCheck size={19} /> Điều kiện tiên quyết</NavLink></>
           )}
         </nav>
-        <div className="sidebar-note">
-          <GraduationCap />
-          <b>Sẵn sàng cho học kỳ mới?</b>
-          <p>Lên kế hoạch học tập để mỗi lựa chọn đều có ý nghĩa.</p>
-        </div>
         <button
           className="logout"
           onClick={async () => {
@@ -233,6 +231,12 @@ export default function App() {
               CSDL PostgreSQL.
             </div>
           )}
+          <div className="panel credit-bar" style={{ marginBottom: 24 }}>
+            <div className="section-title"><b>Tiến độ tín chỉ</b><span>{credits} / {session.user.maxCredits} tín chỉ</span></div>
+            <div className="capacity"><i style={{ width: `${Math.min(100, (credits / session.user.maxCredits) * 100)}%`, background: credits >= session.user.maxCredits ? "#ef4444" : credits / session.user.maxCredits >= .9 ? "#f59e0b" : undefined }} /></div>
+            {credits >= session.user.maxCredits && <small className="warning">Đã đạt giới hạn tín chỉ.</small>}
+            {credits < session.user.maxCredits && credits / session.user.maxCredits >= .9 && <small className="warning">Bạn đã sử dụng từ 90% hạn mức tín chỉ.</small>}
+          </div>
           <Routes>
             <Route path="/login" element={<Navigate to="/" replace />} />
             <Route
@@ -367,6 +371,8 @@ export default function App() {
               element={
                 <Courses
                   week={week}
+                  regsCredits={credits}
+                  maxCredits={session.user.maxCredits}
                   notify={notify}
                   changed={load}
                   preview={(o) => {
@@ -417,6 +423,12 @@ export default function App() {
                             className="text-button"
                             style={{ color: "#ef4444", marginLeft: "auto" }}
                             onClick={async () => {
+                              if (
+                                !window.confirm(
+                                  `Bạn có chắc muốn hủy đăng ký môn ${e.offering.code} - ${e.offering.name}?`,
+                                )
+                              )
+                                return;
                               try {
                                 await api.cancel(e.id);
                                 await load();
@@ -442,16 +454,17 @@ export default function App() {
               }
             />
             <Route
+              path="/waitlist"
+              element={week >= 4 ? <Waitlist notify={notify} changed={load} /> : <Navigate to="/" />}
+            />
+            <Route
               path="/admin/*"
               element={
                 session.user.role === "admin" ? (
                   <div className="panel">
                     <span className="eyebrow">KHÔNG GIAN QUẢN TRỊ</span>
                     <h1>Quản trị học phần</h1>
-                    <p>
-                      Khung quản trị đã sẵn sàng. Chức năng CRUD được triển khai
-                      trong M1_4 theo kế hoạch.
-                    </p>
+                    {location.pathname.includes("/prereqs") ? <AdminPrereqs notify={notify} /> : <AdminCourses notify={notify} />}
                   </div>
                 ) : (
                   <Navigate to="/" replace />
@@ -485,11 +498,15 @@ export default function App() {
 }
 function Courses({
   week,
+  regsCredits,
+  maxCredits,
   notify,
   changed,
   preview,
 }: {
   week: number;
+  regsCredits: number;
+  maxCredits: number;
   notify: (s: string) => void;
   changed: () => Promise<void>;
   preview: (o: Offering) => void;
@@ -540,6 +557,9 @@ function Courses({
     try {
       const check = await api.check(selected.courseId);
       if (check.eligible) {
+        if (regsCredits + selected.credits > maxCredits) {
+          setReason(`Cảnh báo: đăng ký lớp này sẽ vượt hạn mức ${maxCredits} tín chỉ. Hệ thống vẫn gửi yêu cầu để máy chủ quyết định.`);
+        }
         try {
           const key = `web-${selected.id}-${Date.now()}`;
           const res = await api.enroll(selected.id, key);
@@ -657,7 +677,7 @@ function Courses({
             </label>
           ))}
           <label>
-            Thứ học
+            Ngày học
             <select
               value={params.get("day") || ""}
               onChange={(e) => filter("day", e.target.value)}
@@ -669,22 +689,6 @@ function Courses({
                 </option>
               ))}
             </select>
-          </label>
-          <label>
-            Từ giờ
-            <input
-              type="time"
-              value={params.get("start") || ""}
-              onChange={(e) => filter("start", e.target.value)}
-            />
-          </label>
-          <label>
-            Đến giờ
-            <input
-              type="time"
-              value={params.get("end") || ""}
-              onChange={(e) => filter("end", e.target.value)}
-            />
           </label>
         </div>
       </section>
@@ -777,7 +781,9 @@ function Courses({
                               setReason("");
                             }}
                           >
-                            Kiểm tra tiên quyết
+                            {o.enrolledCount >= o.capacity
+                              ? "Vào danh sách chờ"
+                              : "Đăng ký học phần"}
                           </button>
                         )}
                       </div>
@@ -851,6 +857,31 @@ function Courses({
     </>
   );
 }
+function Waitlist({ notify, changed }: { notify: (s: string) => void; changed: () => Promise<void> }) {
+  const [items, setItems] = useState<Awaited<ReturnType<typeof api.getWaitlist>>["items"]>([]);
+  const load = async () => { try { setItems((await api.getWaitlist()).items); } catch (e) { notify((e as Error).message); } };
+  useEffect(() => { void load(); const timer = window.setInterval(load, 30000); const focus = () => void load(); window.addEventListener("focus", focus); return () => { window.clearInterval(timer); window.removeEventListener("focus", focus); }; }, []);
+  return <div><div className="page-heading"><div><div className="eyebrow">XẾP HÀNG HỌC PHẦN</div><h1>Danh sách chờ</h1><p className="muted">Vào trước, ra trước — khi có người hủy, bạn ở đầu hàng sẽ được tự động đăng ký.</p></div></div><section className="panel">{!items.length ? <p className="empty">Bạn chưa ở trong danh sách chờ nào.</p> : items.map((item) => <div className="enrolled" key={item.id}><b>{item.offering.code}</b><span>{item.offering.name} · Lớp {item.offering.section}</span><span className="pill">Vị trí {item.position}</span><small>Tham gia: {new Date(item.enqueuedAt).toLocaleString("vi-VN")}</small>{item.blockedReason && <small className="warning">Chưa thể đôn: {item.blockedReason === "SCHEDULE_CONFLICT" ? "trùng lịch học" : item.blockedReason === "CREDIT_LIMIT_EXCEEDED" ? "vượt hạn mức tín chỉ" : item.blockedReason}</small>}<button className="text-button" style={{ color: "#ef4444", marginLeft: "auto" }} onClick={async () => { try { await api.leaveWaitlist(item.id); await load(); await changed(); notify("Đã rời danh sách chờ"); } catch (e) { notify((e as Error).message); } }}>Rời hàng chờ</button></div>)}</section></div>;
+}
+
+function AdminPrereqs({ notify }: { notify: (s: string) => void }) {
+  const [courses, setCourses] = useState<api.AdminCourse[]>([]); const [courseId, setCourseId] = useState(0); const [data, setData] = useState<api.AdminCoursePrereqsResponse | null>(null); const [busy, setBusy] = useState(false);
+  const load = async (id: number) => { setCourseId(id); if (!id) return setData(null); try { setData(await api.getAdminCoursePrerequisites(id)); } catch (e) { notify((e as Error).message); } };
+  useEffect(() => { void api.listAdminCourses().then((r) => setCourses(r.items)).catch((e) => notify((e as Error).message)); }, []);
+  async function add(e: FormEvent<HTMLFormElement>) { e.preventDefault(); const f = new FormData(e.currentTarget); const prereq = Number(f.get("prereq")); const type = String(f.get("type")) as "AND" | "OR"; const groupNo = type === "OR" ? Number(f.get("groupNo") || 1) : 0; if (!courseId || !prereq || courseId === prereq) return notify("Hãy chọn hai học phần khác nhau."); setBusy(true); try { await api.createAdminPrerequisite({ courseId: courseId, prereqCourseId: prereq, type, groupNo: groupNo }); await load(courseId); notify("Đã thêm điều kiện tiên quyết"); } catch (e) { const err = e as { code?: string; message?: string }; notify(err.code === "PREREQ_CYCLE" ? "Không thể thêm: quan hệ này tạo vòng lặp giữa các học phần." : err.message || "Không thể lưu điều kiện tiên quyết"); } finally { setBusy(false); } }
+  const remove = async (prereq: number) => { try { await api.deleteAdminPrerequisite(courseId, prereq); await load(courseId); notify("Đã xóa điều kiện tiên quyết"); } catch (e) { notify((e as Error).message); } };
+  return <div><p className="muted">Dữ liệu seed được thực hiện bằng lệnh <code>python -m app.seed</code>; hiện chưa có endpoint seed cho giao diện.</p><label>Chọn học phần<select value={courseId} onChange={e => void load(Number(e.target.value))}><option value={0}>-- Chọn --</option>{courses.map(c => <option key={c.id} value={c.id}>{c.code} · {c.name}</option>)}</select></label>{data && <><h3>{data.courseCode} · Điều kiện tiên quyết</h3><div className="panel"><b>AND — bắt buộc</b>{data.andPrerequisites.length ? data.andPrerequisites.map(p => <div className="enrolled" key={p.prereqCourseId}>{p.prereqCode} · {p.prereqName}<button onClick={() => void remove(p.prereqCourseId)}>Xóa</button></div>) : <p className="muted">Không có.</p>}{data.orGroups.map(g => <div key={g.groupNo}><b>OR nhóm {g.groupNo}</b>{g.options.map(p => <div className="enrolled" key={p.prereqCourseId}>{p.prereqCode} · {p.prereqName}<button onClick={() => void remove(p.prereqCourseId)}>Xóa</button></div>)}</div>)}</div><form className="panel actions" onSubmit={add}><select name="prereq" required defaultValue=""><option value="">Điều kiện mới</option>{courses.filter(c => c.id !== courseId).map(c => <option key={c.id} value={c.id}>{c.code} · {c.name}</option>)}</select><select name="type" defaultValue="AND"><option value="AND">AND</option><option value="OR">OR</option></select><input name="groupNo" type="number" min="1" defaultValue="1" placeholder="Số nhóm OR" /><button className="primary" disabled={busy}>{busy ? "Đang lưu…" : "Thêm"}</button></form></>}</div>;
+}
+
+function AdminCourses({ notify }: { notify: (s: string) => void }) {
+  const [items, setItems] = useState<api.AdminCourse[]>([]); const [editing, setEditing] = useState<api.AdminCourse | null>(null); const [q, setQ] = useState("");
+  const load = async () => { try { setItems((await api.listAdminCourses(q ? `q=${encodeURIComponent(q)}` : "")).items); } catch (e) { notify((e as Error).message); } };
+  useEffect(() => { void load(); }, [q]);
+  return <div><div className="actions"><input placeholder="Tìm học phần…" value={q} onChange={e => setQ(e.target.value)} /><button className="primary" onClick={() => setEditing({ id: 0, code: "", name: "", credits: 3, description: "" })}>Thêm học phần</button></div><div className="table-scroll"><table><thead><tr><th>Mã</th><th>Tên học phần</th><th>Tín chỉ</th><th>Thao tác</th></tr></thead><tbody>{items.map(c => <tr key={c.id}><td><b>{c.code}</b></td><td>{c.name}</td><td>{c.credits}</td><td><button onClick={() => setEditing(c)}>Sửa</button> <button onClick={async () => { if (confirm(`Xóa ${c.code}?`)) { try { await api.deleteAdminCourse(c.id); await load(); notify("Đã xóa học phần"); } catch (e) { notify((e as Error).message); } } }}>Xóa</button></td></tr>)}</tbody></table></div>{editing && <CourseForm value={editing} close={() => setEditing(null)} save={async data => { try { if (editing.id) await api.updateAdminCourse(editing.id, data); else await api.createAdminCourse(data); setEditing(null); await load(); notify("Đã lưu học phần"); } catch (e) { notify((e as Error).message); } }} />}</div>;
+}
+
+function CourseForm({ value, close, save }: { value: api.AdminCourse; close: () => void; save: (data: Omit<api.AdminCourse, "id">) => Promise<void> }) { const [form, setForm] = useState({ code: value.code, name: value.name, credits: value.credits, description: value.description || "" }); return <div className="modal-backdrop"><form className="modal" onSubmit={e => { e.preventDefault(); void save(form); }}><h2>{value.id ? "Sửa học phần" : "Thêm học phần"}</h2><input required placeholder="Mã học phần" value={form.code} onChange={e => setForm({ ...form, code: e.target.value })} /><input required placeholder="Tên học phần" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} /><input required type="number" min="1" max="10" placeholder="Tín chỉ" value={form.credits} onChange={e => setForm({ ...form, credits: Number(e.target.value) })} /><textarea placeholder="Mô tả" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} /><div className="actions"><button type="button" onClick={close}>Đóng</button><button className="primary">Lưu</button></div></form></div>; }
+
 function Timetable({
   regs,
   preview,
