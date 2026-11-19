@@ -64,6 +64,24 @@ async def ensure_eligible(
     completed = await session.get(CompletedCourse, (student.id, offering.course_id))
     if completed:
         raise api_error(409, "ALREADY_COMPLETED", "Môn học đã đạt")
+    course_row = (
+        await session.execute(
+            select(Course.credits, Course.min_accumulated_credits).where(
+                Course.id == offering.course_id
+            )
+        )
+    ).one_or_none()
+    credits = int(course_row[0]) if course_row else 0
+    min_acc_credits = int(course_row[1]) if course_row else 0
+    student_acc = int(getattr(student, "accumulated_credits", 0) or 0)
+    if min_acc_credits > 0 and student_acc < min_acc_credits:
+        raise api_error(
+            422,
+            "MIN_ACCUMULATED_CREDITS_NOT_MET",
+            f"Chưa đủ tín chỉ tích lũy tối thiểu (cần {min_acc_credits} TC, hiện có {student_acc} TC)",
+            required_credits=min_acc_credits,
+            current_credits=student_acc,
+        )
     eligibility = await check_eligibility(session, student.id, offering.course_id)
     if not eligibility.eligible:
         raise api_error(
@@ -90,9 +108,6 @@ async def ensure_eligible(
             ],
         )
     current = sum(i["credits"] for i in items)
-    credits = await session.scalar(
-        select(Course.credits).where(Course.id == offering.course_id)
-    )
     if current + credits > student.max_credits:
         raise api_error(
             422,

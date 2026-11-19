@@ -20,7 +20,9 @@ class UserOut(BaseModel):
     full_name: str
     role: Literal["student", "admin"]
     mssv: str | None
+    faculty: str | None = None
     max_credits: int
+    accumulated_credits: int = 0
 
 
 class TokenResponse(BaseModel):

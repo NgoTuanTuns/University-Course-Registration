@@ -24,6 +24,7 @@ class OfferingItem(BaseModel):
     code: str
     name: str
     credits: int
+    min_accumulated_credits: int = 0
     term: str
     section: str
     instructor: str | None
@@ -32,6 +33,9 @@ class OfferingItem(BaseModel):
     capacity: int
     enrolled_count: int
     my_status: Literal["ENROLLED", "WAITLISTED"] | None = None
+    eligibility_status: (
+        Literal["RECOMMENDED", "ELIGIBLE", "LOCKED", "COMPLETED"] | None
+    ) = None
 
 
 class CoursePage(BaseModel):

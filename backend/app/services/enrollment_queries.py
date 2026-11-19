@@ -1,10 +1,100 @@
 """Read models shared by course search, timetable and enrollment rules."""
 
+from collections import defaultdict
+
 from sqlalchemy import case, cast, exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import api_error
-from app.models import Course, CourseOffering, Enrollment, Student, Waitlist
+from app.core.faculty import allowed_prefixes_for_faculty
+from app.models import (
+    CompletedCourse,
+    Course,
+    CourseOffering,
+    Enrollment,
+    Prerequisite,
+    Student,
+    Waitlist,
+)
+
+
+def student_academic_year(accumulated_credits: int) -> int:
+    """Suy ra năm học hiện tại (1..4) dựa trên số tín chỉ tích lũy."""
+    if accumulated_credits < 20:
+        return 1
+    if accumulated_credits < 40:
+        return 2
+    if accumulated_credits < 60:
+        return 3
+    return 4
+
+
+def course_target_year(code: str, min_accumulated_credits: int) -> int:
+    """Suy ra năm học mục tiêu (1..4) của học phần từ mã môn và ngưỡng tín chỉ."""
+    digits = "".join(ch for ch in code if ch.isdigit())
+    if digits and digits[0] in ("1", "2", "3", "4"):
+        return int(digits[0])
+    if min_accumulated_credits >= 36:
+        return 4
+    if min_accumulated_credits >= 15:
+        return 3
+    if min_accumulated_credits >= 3:
+        return 2
+    return 1
+
+
+def rank_courses_for_student(
+    courses: list[tuple[int, str, int]],
+    accumulated_credits: int,
+    completed_ids: set[int],
+    prereq_rows: list[tuple[int, int, str, int]],
+) -> tuple[dict[int, int], dict[int, str]]:
+    """Tính thứ tự ưu tiên & trạng thái đủ điều kiện cho từng học phần của sinh viên.
+
+    Thứ tự ưu tiên:
+      0 (RECOMMENDED): Đủ tín chỉ + đủ tiên quyết + đúng tiến độ năm học hiện tại.
+      1 (ELIGIBLE):    Đủ tín chỉ + đủ tiên quyết (các năm khác / đại cương còn lại).
+      2 (LOCKED):      Chưa đủ tín chỉ tích lũy hoặc thiếu môn tiên quyết.
+      3 (COMPLETED):   Đã hoàn thành (đẩy xuống cuối danh sách).
+    """
+    student_year = student_academic_year(accumulated_credits)
+    and_map: dict[int, list[int]] = defaultdict(list)
+    or_map: dict[int, dict[int, list[int]]] = defaultdict(lambda: defaultdict(list))
+    for course_id, prereq_id, ptype, group_no in prereq_rows:
+        if ptype == "AND" or group_no == 0:
+            and_map[course_id].append(prereq_id)
+        else:
+            or_map[course_id][group_no].append(prereq_id)
+
+    scored: list[tuple[tuple, int, str]] = []
+    for cid, code, min_tc in courses:
+        target_year = course_target_year(code, min_tc)
+        if cid in completed_ids:
+            status = "COMPLETED"
+            key = (3, 0, 0, code)
+        else:
+            and_ok = all(p in completed_ids for p in and_map.get(cid, ()))
+            or_ok = all(
+                any(p in completed_ids for p in opts)
+                for opts in or_map.get(cid, {}).values()
+            )
+            tc_ok = accumulated_credits >= min_tc
+            if and_ok and or_ok and tc_ok:
+                if target_year == student_year:
+                    status = "RECOMMENDED"
+                    key = (0, 0, -min_tc, code)
+                else:
+                    status = "ELIGIBLE"
+                    key = (1, abs(target_year - student_year), -min_tc, code)
+            else:
+                status = "LOCKED"
+                key = (2, abs(target_year - student_year), min_tc, code)
+        scored.append((key, cid, status))
+
+    scored.sort(key=lambda item: item[0])
+    rank_map = {cid: idx for idx, (_, cid, _) in enumerate(scored)}
+    status_map = {cid: status for _, cid, status in scored}
+    return rank_map, status_map
 
 
 def offering_dict(offering: CourseOffering, course: Course) -> dict:
@@ -21,7 +111,10 @@ def offering_dict(offering: CourseOffering, course: Course) -> dict:
             "capacity",
             "enrolled_count",
         )
-    } | {field: getattr(course, field) for field in ("code", "name", "credits")}
+    } | {
+        field: getattr(course, field)
+        for field in ("code", "name", "credits", "min_accumulated_credits")
+    }
 
 
 async def latest_term(session: AsyncSession, term: str | None) -> str | None:
@@ -70,6 +163,15 @@ def escaped(value: str) -> str:
 async def search_courses(session: AsyncSession, student_id: int, **filters) -> dict:
     term = await latest_term(session, filters.get("term"))
     conditions = [CourseOffering.term == term]
+    student = await session.get(Student, student_id)
+    faculty = (
+        getattr(student, "faculty", None)
+        if student and student.role == "student"
+        else None
+    )
+    allowed_prefixes = allowed_prefixes_for_faculty(faculty)
+    if allowed_prefixes:
+        conditions.append(or_(*[Course.code.like(f"{p}%") for p in allowed_prefixes]))
     for key, column in (
         ("section", CourseOffering.section),
         ("instructor", CourseOffering.instructor),
@@ -125,16 +227,61 @@ async def search_courses(session: AsyncSession, student_id: int, **filters) -> d
         )
     )
     page, size = filters["page"], filters["page_size"]
+
+    status_map: dict[int, str] = {}
+    order_clauses: list = []
+    if student is not None and student.role == "student":
+        course_rows = (
+            await session.execute(
+                select(
+                    Course.id, Course.code, Course.min_accumulated_credits
+                ).distinct()
+            )
+        ).all()
+        completed_ids = set(
+            (
+                await session.scalars(
+                    select(CompletedCourse.course_id).where(
+                        CompletedCourse.student_id == student_id
+                    )
+                )
+            ).all()
+        )
+        prereq_rows = (
+            await session.execute(
+                select(
+                    Prerequisite.course_id,
+                    Prerequisite.prereq_course_id,
+                    Prerequisite.type,
+                    Prerequisite.group_no,
+                )
+            )
+        ).all()
+        rank_map, status_map = rank_courses_for_student(
+            [(r[0], r[1], r[2]) for r in course_rows],
+            student.accumulated_credits,
+            completed_ids,
+            [(r[0], r[1], r[2], r[3]) for r in prereq_rows],
+        )
+        if rank_map:
+            order_clauses.append(case(rank_map, value=Course.id, else_=999999))
+
+    order_clauses.extend([Course.code, CourseOffering.section, CourseOffering.id])
+
     rows = await session.execute(
         base.add_columns(
             case((active, "ENROLLED"), (waiting, "WAITLISTED"), else_=None)
         )
-        .order_by(Course.code, CourseOffering.section, CourseOffering.id)
+        .order_by(*order_clauses)
         .offset((page - 1) * size)
         .limit(size)
     )
     return {
-        "items": [offering_dict(o, c) | {"my_status": s} for o, c, s in rows],
+        "items": [
+            offering_dict(o, c)
+            | {"my_status": s, "eligibility_status": status_map.get(c.id)}
+            for o, c, s in rows
+        ],
         "total": total,
         "page": page,
         "page_size": size,

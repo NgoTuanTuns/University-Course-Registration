@@ -37,18 +37,21 @@ export class ApiError extends Error {
   code: string;
   status: number;
   retryAfter?: number;
+  details?: Record<string, unknown>;
 
   constructor(
     code: string,
     message: string,
     status: number,
     retryAfter?: number,
+    details?: Record<string, unknown>,
   ) {
     super(message || code);
     this.name = "ApiError";
     this.code = code;
     this.status = status;
     this.retryAfter = retryAfter;
+    this.details = details;
   }
 }
 
@@ -148,13 +151,34 @@ export async function http<T>(
       return http<T>(path, method, body, signal, false, extraHeaders);
     }
     if (code === "CONCURRENT_UPDATE" && retry) {
-      await new Promise((resolve) => setTimeout(resolve, 80 + Math.random() * 180));
+      await new Promise((resolve) =>
+        setTimeout(resolve, 80 + Math.random() * 180),
+      );
       return http<T>(path, method, body, signal, false, extraHeaders);
     }
     const retryAfterHeader = response.headers.get("Retry-After");
     const retryAfter = retryAfterHeader ? Number(retryAfterHeader) : undefined;
-    if (response.status === 429 && retry && retryAfter !== undefined) {
-      await new Promise((resolve) => setTimeout(resolve, Math.min(retryAfter * 1000, 10000)));
+    if (
+      response.status === 429 &&
+      retry &&
+      retryAfter !== undefined &&
+      !Number.isNaN(retryAfter)
+    ) {
+      const waitSec = Math.min(Math.max(retryAfter, 1), 10);
+      window.dispatchEvent(
+        new CustomEvent("rate-limited", { detail: { retryAfter: waitSec } }),
+      );
+      await new Promise<void>((resolve, reject) => {
+        const timer = window.setTimeout(resolve, waitSec * 1000);
+        signal?.addEventListener(
+          "abort",
+          () => {
+            window.clearTimeout(timer);
+            reject(new DOMException("Aborted", "AbortError"));
+          },
+          { once: true },
+        );
+      });
       return http<T>(path, method, body, signal, false, extraHeaders);
     }
     if (
@@ -172,7 +196,13 @@ export async function http<T>(
       code === "RATE_LIMITED" && retryAfter
         ? `${friendly} Thử lại sau ${retryAfter} giây.`
         : friendly;
-    throw new ApiError(code, message, response.status, retryAfter);
+    throw new ApiError(
+      code,
+      message,
+      response.status,
+      retryAfter,
+      toCamel(error) as Record<string, unknown>,
+    );
   }
 
   return toCamel(raw) as T;

@@ -132,3 +132,35 @@ class PrereqUpdate(BaseModel):
 class PrereqListResponse(BaseModel):
     items: list[PrereqEdgeOut]
     total: int
+
+
+# ===========================================================================
+# Graph Visualizer API (/prerequisites/graph)
+# ===========================================================================
+
+
+class PrereqGraphNodeOut(BaseModel):
+    id: int
+    code: str
+    name: str
+    credits: int
+    min_accumulated_credits: int
+    level: int
+    status: Literal["COMPLETED", "ELIGIBLE", "LOCKED"]
+    missing_credits: int = 0
+    missing_courses: list[str] = Field(default_factory=list)
+    and_prereqs: list[str] = Field(default_factory=list)
+    or_groups: list[OrGroupOut] = Field(default_factory=list)
+
+
+class PrereqGraphEdgeOut(BaseModel):
+    course_id: int
+    prereq_course_id: int
+    type: Literal["AND", "OR"]
+    group_no: int
+
+
+class PrereqGraphResponse(BaseModel):
+    student_accumulated_credits: int
+    nodes: list[PrereqGraphNodeOut]
+    edges: list[PrereqGraphEdgeOut]

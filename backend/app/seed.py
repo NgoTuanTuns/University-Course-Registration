@@ -77,7 +77,9 @@ async def _load_students(session: AsyncSession, ds: Dataset) -> dict[str, int]:
             full_name=s.full_name,
             role=s.role,
             program=s.program,
+            faculty=s.faculty,
             max_credits=s.max_credits,
+            accumulated_credits=s.accumulated_credits,
             password_hash=admin_hash if s.role == "admin" else student_hash,
         )
         for s in ds.students
@@ -88,7 +90,13 @@ async def _load_students(session: AsyncSession, ds: Dataset) -> dict[str, int]:
 
 async def _load_courses(session: AsyncSession, ds: Dataset) -> dict[str, int]:
     rows = [
-        dict(code=c.code, name=c.name, credits=c.credits, description=c.description)
+        dict(
+            code=c.code,
+            name=c.name,
+            credits=c.credits,
+            min_accumulated_credits=c.min_accumulated_credits,
+            description=c.description,
+        )
         for c in ds.courses
     ]
     result = await _insert_returning(session, Course, rows, Course.id, Course.code)

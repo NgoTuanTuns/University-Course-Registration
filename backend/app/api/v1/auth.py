@@ -57,7 +57,9 @@ async def _issue_token_response(user: Student) -> TokenResponse:
             full_name=user.full_name,
             role=user.role,
             mssv=user.mssv,
+            faculty=getattr(user, "faculty", None),
             max_credits=user.max_credits,
+            accumulated_credits=getattr(user, "accumulated_credits", 0),
         ),
     )
 

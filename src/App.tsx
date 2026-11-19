@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { Suspense, lazy, memo, useEffect, useRef, useState } from "react";
 import {
   NavLink,
   Routes,
@@ -9,9 +9,12 @@ import {
   useSearchParams,
 } from "react-router-dom";
 import {
+  Award,
   BookOpen,
   LayoutDashboard,
   CalendarDays,
+  Clock,
+  GitBranch,
   GraduationCap,
   LogOut,
   Sun,
@@ -23,10 +26,23 @@ import {
   Menu,
 } from "lucide-react";
 import * as api from "./api";
-import { getSession, setSession, mockMode } from "./api/http";
+import { getSession, setSession } from "./api/http";
 import type { Offering, Enrollment, Session } from "./types";
 import { findSlotConflicts, parseTime } from "./features/timetable/conflicts";
-const week = Number(import.meta.env.VITE_WEEK || 3);
+import {
+  detectPromotedWaitlist,
+  getCreditStatus,
+  type WaitlistSummary,
+} from "./features/registration/helpers";
+
+const AdminPanel = lazy(() => import("./features/admin/AdminPanel"));
+const PrerequisiteGraphView = lazy(
+  () => import("./features/prerequisites/PrerequisiteGraphView"),
+);
+const AcademicRecordView = lazy(
+  () => import("./features/academic/AcademicRecordView"),
+);
+const week = Number(import.meta.env.VITE_WEEK || 5);
 export default function App() {
   const [session, updateSession] = useState<Session | null>(getSession());
   const [dark, setDark] = useState(localStorage.getItem("theme") === "dark");
@@ -63,8 +79,21 @@ export default function App() {
       updateSession(null);
       notify("Phiên đã hết hạn. Vui lòng đăng nhập lại.");
     };
+    const onRateLimited = (event: Event) => {
+      const sec = (event as CustomEvent<{ retryAfter?: number }>).detail
+        ?.retryAfter;
+      notify(
+        sec
+          ? `Hệ thống đang đông, tự động thử lại sau ${sec} giây…`
+          : "Hệ thống đang đông, đang tự động thử lại…",
+      );
+    };
     window.addEventListener("session-expired", expire);
-    return () => window.removeEventListener("session-expired", expire);
+    window.addEventListener("rate-limited", onRateLimited);
+    return () => {
+      window.removeEventListener("session-expired", expire);
+      window.removeEventListener("rate-limited", onRateLimited);
+    };
   }, []);
   if (!session)
     return (
@@ -117,7 +146,7 @@ export default function App() {
               name="email"
               type="email"
               required
-              defaultValue={mockMode ? "sv0001@uni.edu.vn" : ""}
+              placeholder="sv0001@uni.edu.vn"
             />
           </label>
           <label>
@@ -128,9 +157,7 @@ export default function App() {
             Đăng nhập <ArrowUpRight size={17} />
           </button>
           <p className="muted">
-            {mockMode
-              ? "Bản mô phỏng: dùng email sinh viên hoặc admin@uni.edu.vn, mật khẩu bất kỳ."
-              : "Kết nối hệ thống thật · Dùng tài khoản do trường cấp."}
+            Sử dụng tài khoản email do nhà trường cấp để đăng nhập.
           </p>
           {toast && <p role="alert">{toast}</p>}
         </form>
@@ -148,7 +175,11 @@ export default function App() {
           <div className="avatar">{admin ? "QT" : "SV"}</div>
           <div>
             <b>{admin ? "Không gian quản trị" : "Cổng sinh viên"}</b>
-            <small>Đại học · Học kỳ 2026-1</small>
+            <small>
+              {admin
+                ? "Đại học · Học kỳ 2026-1"
+                : session.user.faculty || "Đại học · Học kỳ 2026-1"}
+            </small>
           </div>
         </div>
         <div className="nav-label">KHÔNG GIAN HỌC TẬP</div>
@@ -159,7 +190,11 @@ export default function App() {
             ...(week >= 2
               ? [["/timetable", "Thời khóa biểu", CalendarDays]]
               : []),
-            ...(week >= 4 ? [["/waitlist", "Danh sách chờ", LayoutDashboard]] : []),
+            ...(week >= 4
+              ? [["/waitlist", "Danh sách chờ", LayoutDashboard]]
+              : []),
+            ["/prerequisites", "Sơ đồ tiên quyết", GitBranch],
+            ["/academic-record", "Hồ sơ học tập", Award],
           ].map(([path, label, Icon]) => (
             <NavLink
               key={String(path)}
@@ -171,10 +206,15 @@ export default function App() {
             </NavLink>
           ))}
           {session.user.role === "admin" && (
-            <><NavLink to="/admin/courses">
-              <ShieldCheck size={19} />
-              Quản trị học phần
-            </NavLink><NavLink to="/admin/prereqs"><ShieldCheck size={19} /> Điều kiện tiên quyết</NavLink></>
+            <>
+              <NavLink to="/admin/courses">
+                <ShieldCheck size={19} />
+                Quản trị học phần
+              </NavLink>
+              <NavLink to="/admin/prereqs">
+                <ShieldCheck size={19} /> Điều kiện tiên quyết
+              </NavLink>
+            </>
           )}
         </nav>
         <button
@@ -202,14 +242,6 @@ export default function App() {
             <ChevronRight size={14} /> <b>Học kỳ I, 2026–2027</b>
           </span>
           <div className="header-right">
-            <span className="mode">
-              {mockMode
-                ? "● Dữ liệu mô phỏng"
-                : week >= 3
-                  ? "● API xác thực · Danh mục tĩnh"
-                  : "● API thật"}{" "}
-              · Tuần {week}
-            </span>
             <button
               aria-label="Đổi giao diện sáng tối"
               onClick={() => setDark(!dark)}
@@ -223,148 +255,354 @@ export default function App() {
           </div>
         </header>
         <main>
-          {!mockMode && (
-            <div className="notice" role="status">
-              Hệ thống đã hợp nhất toàn diện 5 phân hệ: Giao diện (M1), Đồ thị
-              tiên quyết DAG (M2), Đăng ký & Thời khóa biểu (M3), CSDL & Bảo mật
-              (M4), Kiểm định CI (M5). Mọi thao tác đều đồng bộ trực tiếp với
-              CSDL PostgreSQL.
-            </div>
-          )}
-          <div className="panel credit-bar" style={{ marginBottom: 24 }}>
-            <div className="section-title"><b>Tiến độ tín chỉ</b><span>{credits} / {session.user.maxCredits} tín chỉ</span></div>
-            <div className="capacity"><i style={{ width: `${Math.min(100, (credits / session.user.maxCredits) * 100)}%`, background: credits >= session.user.maxCredits ? "#ef4444" : credits / session.user.maxCredits >= .9 ? "#f59e0b" : undefined }} /></div>
-            {credits >= session.user.maxCredits && <small className="warning">Đã đạt giới hạn tín chỉ.</small>}
-            {credits < session.user.maxCredits && credits / session.user.maxCredits >= .9 && <small className="warning">Bạn đã sử dụng từ 90% hạn mức tín chỉ.</small>}
-          </div>
+          {!admin &&
+            location.pathname !== "/" &&
+            (() => {
+              const cs = getCreditStatus(credits, session.user.maxCredits);
+              return (
+                <div className="panel credit-bar" style={{ marginBottom: 24 }}>
+                  <div className="section-title">
+                    <b>Tiến độ tín chỉ</b>
+                    <span>
+                      Kỳ này: {credits} / {session.user.maxCredits} TC · Tích
+                      lũy: <b>{session.user.accumulatedCredits ?? 0} TC</b>
+                    </span>
+                  </div>
+                  <div className="capacity">
+                    <i
+                      style={{
+                        width: `${cs.percent}%`,
+                        background: cs.color,
+                      }}
+                    />
+                  </div>
+                  {cs.warningText && (
+                    <small className="warning">{cs.warningText}</small>
+                  )}
+                </div>
+              );
+            })()}
           <Routes>
             <Route path="/login" element={<Navigate to="/" replace />} />
             <Route
               path="/"
-              element={
-                <>
-                  <div className="page-heading">
-                    <div>
-                      <div className="eyebrow">TỔNG QUAN HỌC TẬP</div>
-                      <h1>
-                        Chào {session.user.fullName.split(" ").at(-1)}, ngày mới
-                        tốt lành <span>✦</span>
-                      </h1>
-                      <p className="muted">
-                        Mọi kế hoạch cho một học kỳ thành công, bắt đầu từ đây.
-                      </p>
-                    </div>
-                    <span className="pill">Học kỳ 2026-1</span>
-                  </div>
-                  <div className="hero">
-                    <div>
-                      <span className="eyebrow">HÀNH TRÌNH CỦA BẠN</span>
-                      <h2>
-                        Học kỳ mới.
-                        <br />
-                        Cơ hội mới.
-                      </h2>
-                      <p>
-                        Khám phá học phần phù hợp và chủ động
-                        <br />
-                        sắp xếp lịch học theo cách của bạn.
-                      </p>
-                      <button onClick={() => nav("/courses")}>
-                        Khám phá học phần <ArrowUpRight size={18} />
-                      </button>
-                    </div>
-                    <div className="hero-art">
-                      <GraduationCap size={110} />
-                      <span className="floating">✦ Build your future</span>
-                    </div>
-                  </div>
-                  <div className="stats">
-                    {[
-                      [
-                        "Tín chỉ đã đăng ký",
-                        credits,
-                        "/ " + session.user.maxCredits + " tín chỉ",
-                      ],
-                      ["Lớp học phần", regs.length, "trong học kỳ này"],
-                      [
-                        "Buổi học mỗi tuần",
-                        regs.reduce(
-                          (n, e) => n + e.offering.schedule.length,
-                          0,
-                        ),
-                        "đã được lên lịch",
-                      ],
-                      ["Học kỳ hiện tại", "2026-1", "Năm học 2026–2027"],
-                    ].map(([label, value, note]) => (
-                      <article key={label}>
-                        <span>
-                          {label}
-                          <ArrowUpRight size={17} />
-                        </span>
-                        <strong>{value}</strong>
-                        <small>{note}</small>
-                      </article>
-                    ))}
-                  </div>
-                  <div className="dashboard-bottom">
-                    <section className="panel">
-                      <div className="section-title">
-                        <h3>Kế hoạch học kỳ</h3>
-                        <span className="pill">
-                          {credits} / {session.user.maxCredits} tín chỉ
-                        </span>
-                      </div>
-                      <div className="chart">
-                        {["T2", "T3", "T4", "T5", "T6", "T7", "CN"].map(
-                          (d, i) => (
-                            <div key={d}>
-                              <div
-                                style={{
-                                  height: Math.max(
-                                    5,
-                                    regs.reduce(
-                                      (n, e) =>
-                                        n +
-                                        e.offering.schedule.filter(
-                                          (s) => s.day === i + 1,
-                                        ).length,
-                                      0,
-                                    ) * 45,
-                                  ),
-                                }}
-                              />
-                              <span>{d}</span>
-                            </div>
-                          ),
-                        )}
-                      </div>
-                      <p className="muted">
-                        Số buổi học theo ngày · Học kỳ 2026-1
-                      </p>
-                    </section>
-                    <section className="panel">
-                      <h3>Đi từng bước, chọn đúng môn</h3>
-                      {[
-                        "Tra cứu học phần theo nhu cầu",
-                        "Xem trước lịch học và kiểm tra trùng",
-                        "Kiểm tra điều kiện trước khi đăng ký",
-                      ].map((s, i) => (
-                        <div className="step" key={s}>
-                          <b>0{i + 1}</b>
-                          <span>{s}</span>
-                          <ChevronRight size={16} />
+              element={(() => {
+                const accCredits = session.user.accumulatedCredits ?? 0;
+                const gradTarget = 120;
+                const gradPct = Math.min(
+                  100,
+                  Math.round((accCredits / gradTarget) * 100),
+                );
+                const studentYear =
+                  accCredits < 20
+                    ? 1
+                    : accCredits < 40
+                      ? 2
+                      : accCredits < 60
+                        ? 3
+                        : 4;
+                const weeklySessions = regs.reduce(
+                  (n, e) => n + e.offering.schedule.length,
+                  0,
+                );
+                const cs = getCreditStatus(credits, session.user.maxCredits);
+                const ringR = 46;
+                const ringC = 2 * Math.PI * ringR;
+                const ringOffset = ringC * (1 - gradPct / 100);
+
+                return (
+                  <>
+                    <div className="hero-tdtu">
+                      <div className="hero-tdtu-left">
+                        <div className="hero-tdtu-badges">
+                          <span className="hero-badge-red">HỌC KỲ 2026-1</span>
+                          {session.user.role === "student" && (
+                            <span className="hero-badge-glass">
+                              Sinh viên Năm {studentYear}
+                            </span>
+                          )}
+                          {session.user.mssv && (
+                            <span className="hero-badge-glass">
+                              MSSV: {session.user.mssv}
+                            </span>
+                          )}
                         </div>
-                      ))}
-                      <button
-                        className="text-button"
+                        <h1>{session.user.fullName}</h1>
+                        <p>
+                          {session.user.faculty ||
+                            "Cổng đăng ký học phần Đại học"}{" "}
+                          · Quản lý kế hoạch học tập, kiểm tra điều kiện tiên
+                          quyết và xếp thời khóa biểu theo đúng tiến độ đào tạo.
+                        </p>
+                        <div className="hero-tdtu-actions">
+                          <button
+                            className="btn-tdtu-red"
+                            onClick={() => nav("/courses")}
+                          >
+                            Đăng ký học phần ngay <ArrowUpRight size={17} />
+                          </button>
+                          <button
+                            className="btn-tdtu-glass"
+                            onClick={() => nav("/prerequisites")}
+                          >
+                            <GitBranch size={16} /> Xem sơ đồ tiên quyết
+                          </button>
+                        </div>
+                      </div>
+
+                      <div
+                        className="hero-tdtu-ring"
+                        onClick={() => nav("/academic-record")}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ")
+                            nav("/academic-record");
+                        }}
+                        title="Xem chi tiết hồ sơ học tập"
+                      >
+                        <svg width="118" height="118" viewBox="0 0 118 118">
+                          <circle
+                            cx="59"
+                            cy="59"
+                            r={ringR}
+                            fill="none"
+                            stroke="rgba(255,255,255,0.16)"
+                            strokeWidth="9"
+                          />
+                          <circle
+                            cx="59"
+                            cy="59"
+                            r={ringR}
+                            fill="none"
+                            stroke="#ff4d54"
+                            strokeWidth="9"
+                            strokeLinecap="round"
+                            strokeDasharray={ringC}
+                            strokeDashoffset={ringOffset}
+                            transform="rotate(-90 59 59)"
+                          />
+                        </svg>
+                        <div className="hero-ring-center">
+                          <strong>{gradPct}%</strong>
+                          <span>
+                            {accCredits}/{gradTarget} TC
+                          </span>
+                        </div>
+                        <small>Tiến độ tích lũy</small>
+                      </div>
+                    </div>
+
+                    <div className="stats stats-pro">
+                      <article
+                        className="kpi-card"
+                        onClick={() => nav("/academic-record")}
+                      >
+                        <div className="kpi-top">
+                          <span className="kpi-icon kpi-blue">
+                            <Award size={19} />
+                          </span>
+                          <span className="kpi-tag">Năm {studentYear}</span>
+                        </div>
+                        <span className="kpi-label">Tín chỉ tích lũy</span>
+                        <strong>{accCredits} TC</strong>
+                        <small>Cơ sở mở khóa học phần nâng cao</small>
+                      </article>
+
+                      <article
+                        className="kpi-card"
                         onClick={() => nav("/courses")}
                       >
-                        Bắt đầu lên kế hoạch →
-                      </button>
-                    </section>
-                  </div>
-                </>
-              }
+                        <div className="kpi-top">
+                          <span className="kpi-icon kpi-red">
+                            <BookOpen size={19} />
+                          </span>
+                          <span className="kpi-tag">{cs.percent}%</span>
+                        </div>
+                        <span className="kpi-label">Tín chỉ học kỳ này</span>
+                        <strong>
+                          {credits}{" "}
+                          <span className="kpi-sub">
+                            / {session.user.maxCredits} TC
+                          </span>
+                        </strong>
+                        <div className="capacity" style={{ width: "100%" }}>
+                          <i
+                            style={{
+                              width: `${cs.percent}%`,
+                              background: cs.color,
+                            }}
+                          />
+                        </div>
+                      </article>
+
+                      <article
+                        className="kpi-card"
+                        onClick={() => nav("/timetable")}
+                      >
+                        <div className="kpi-top">
+                          <span className="kpi-icon kpi-navy">
+                            <CalendarDays size={19} />
+                          </span>
+                          <span className="kpi-tag">HK 2026-1</span>
+                        </div>
+                        <span className="kpi-label">Lớp học phần đã chọn</span>
+                        <strong>{regs.length} lớp</strong>
+                        <small>{weeklySessions} buổi học mỗi tuần</small>
+                      </article>
+
+                      <article
+                        className="kpi-card"
+                        onClick={() => nav("/prerequisites")}
+                      >
+                        <div className="kpi-top">
+                          <span className="kpi-icon kpi-emerald">
+                            <GitBranch size={19} />
+                          </span>
+                          <span className="kpi-tag">DAG</span>
+                        </div>
+                        <span className="kpi-label">Lộ trình tiên quyết</span>
+                        <strong style={{ fontSize: 20 }}>Trực quan hóa</strong>
+                        <small>Xem chuỗi môn AND / OR & mở khóa</small>
+                      </article>
+                    </div>
+
+                    <div className="dashboard-bottom">
+                      <section className="panel">
+                        <div className="section-title">
+                          <h3>
+                            <Clock size={16} /> Phân bổ buổi học trong tuần
+                          </h3>
+                          <span className="pill">
+                            {weeklySessions} buổi · {credits} TC
+                          </span>
+                        </div>
+                        <div className="chart">
+                          {["T2", "T3", "T4", "T5", "T6", "T7", "CN"].map(
+                            (d, i) => {
+                              const count = regs.reduce(
+                                (n, e) =>
+                                  n +
+                                  e.offering.schedule.filter(
+                                    (s) => s.day === i + 1,
+                                  ).length,
+                                0,
+                              );
+                              return (
+                                <div key={d}>
+                                  <small className="chart-val">
+                                    {count > 0 ? count : ""}
+                                  </small>
+                                  <div
+                                    style={{
+                                      height: Math.max(8, count * 42),
+                                      opacity: count > 0 ? 1 : 0.25,
+                                    }}
+                                  />
+                                  <span>{d}</span>
+                                </div>
+                              );
+                            },
+                          )}
+                        </div>
+                        {regs.length > 0 ? (
+                          <div className="mini-enrolled-list">
+                            {regs.slice(0, 3).map((e) => (
+                              <div className="mini-enrolled-item" key={e.id}>
+                                <b>{e.offering.code}</b>
+                                <span>{e.offering.name}</span>
+                                <small>{e.offering.credits} TC</small>
+                              </div>
+                            ))}
+                            {regs.length > 3 && (
+                              <button
+                                className="text-button"
+                                onClick={() => nav("/timetable")}
+                              >
+                                Xem toàn bộ {regs.length} lớp trong thời khóa
+                                biểu →
+                              </button>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="dash-empty-cta">
+                            <span>
+                              Chưa có học phần nào được đăng ký trong kỳ 2026-1.
+                            </span>
+                            <button
+                              className="text-button"
+                              onClick={() => nav("/courses")}
+                            >
+                              Chọn môn đúng tiến độ Năm {studentYear} →
+                            </button>
+                          </div>
+                        )}
+                      </section>
+
+                      <section className="panel">
+                        <div className="section-title">
+                          <h3>Thao tác nhanh</h3>
+                          <span className="muted">Dành cho sinh viên</span>
+                        </div>
+                        <div className="quick-grid">
+                          {[
+                            {
+                              title: "Tra cứu & Đăng ký học phần",
+                              desc: `Ưu tiên hiển thị các môn đúng tiến độ Năm ${studentYear} và đủ điều kiện`,
+                              to: "/courses",
+                              icon: BookOpen,
+                              tone: "kpi-red",
+                            },
+                            {
+                              title: "Sơ đồ tiên quyết (DAG)",
+                              desc: "Theo dõi môn bắt buộc (AND), môn thay thế (OR) và nhánh mở khóa",
+                              to: "/prerequisites",
+                              icon: GitBranch,
+                              tone: "kpi-blue",
+                            },
+                            {
+                              title: "Thời khóa biểu cá nhân",
+                              desc: "Kiểm tra trực quan lịch học theo ngày và phát hiện trùng giờ",
+                              to: "/timetable",
+                              icon: CalendarDays,
+                              tone: "kpi-navy",
+                            },
+                            {
+                              title: "Hồ sơ học tập & GPA",
+                              desc: `Xem điểm trung bình và danh sách ${accCredits} tín chỉ đã tích lũy`,
+                              to: "/academic-record",
+                              icon: Award,
+                              tone: "kpi-emerald",
+                            },
+                          ].map((item) => {
+                            const Icon = item.icon;
+                            return (
+                              <button
+                                key={item.to}
+                                type="button"
+                                className="quick-tile"
+                                onClick={() => nav(item.to)}
+                              >
+                                <span className={`kpi-icon ${item.tone}`}>
+                                  <Icon size={18} />
+                                </span>
+                                <div className="quick-tile-body">
+                                  <b>{item.title}</b>
+                                  <small>{item.desc}</small>
+                                </div>
+                                <ChevronRight
+                                  size={16}
+                                  className="quick-arrow"
+                                />
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </section>
+                    </div>
+                  </>
+                );
+              })()}
             />
             <Route
               path="/courses"
@@ -389,15 +627,38 @@ export default function App() {
                   <>
                     <div className="page-heading">
                       <div>
-                        <div className="eyebrow">KẾ HOẠCH CÁ NHÂN</div>
-                        <h1>Thời khóa biểu</h1>
+                        <div className="eyebrow">THỜI KHÓA BIỂU CÁ NHÂN</div>
+                        <h1>Lịch học trong tuần</h1>
                         <p className="muted">
-                          Một góc nhìn rõ ràng cho tuần học của bạn.
+                          Theo dõi lịch học theo khung giờ 07:00 – 21:00, xem
+                          trước lớp mới và phát hiện xung đột tự động.
                         </p>
                       </div>
-                      <select aria-label="Học kỳ">
-                        <option>2026-1</option>
-                      </select>
+                      <div
+                        className="actions"
+                        style={{ alignItems: "center", flexWrap: "wrap" }}
+                      >
+                        <select
+                          aria-label="Học kỳ"
+                          style={{ width: "auto", marginTop: 0 }}
+                        >
+                          <option>Học kỳ 2026-1</option>
+                        </select>
+                        <button
+                          type="button"
+                          className="btn-outline"
+                          onClick={() => window.print()}
+                        >
+                          In thời khóa biểu
+                        </button>
+                        <button
+                          type="button"
+                          className="primary"
+                          onClick={() => nav("/courses")}
+                        >
+                          Thêm học phần <ArrowUpRight size={15} />
+                        </button>
+                      </div>
                     </div>
                     {error && (
                       <div className="notice">
@@ -405,47 +666,123 @@ export default function App() {
                         <button onClick={load}>Thử lại</button>
                       </div>
                     )}
+                    {preview && (
+                      <div className="tt-preview-banner">
+                        <div>
+                          <span className="tt-preview-tag">ĐANG XEM TRƯỚC</span>
+                          <b>
+                            {preview.code} — {preview.name}
+                          </b>
+                          <small>
+                            Lớp {preview.section} · {preview.credits} TC ·{" "}
+                            {preview.instructor}
+                          </small>
+                        </div>
+                        <button
+                          type="button"
+                          className="btn-outline"
+                          onClick={() => setPreview(null)}
+                        >
+                          Bỏ xem trước
+                        </button>
+                      </div>
+                    )}
                     <Timetable regs={regs} preview={preview} />
                     <section className="panel">
                       <div className="section-title">
-                        <h3>Lớp đang đăng ký · {credits} tín chỉ</h3>
+                        <h3>
+                          Lớp đang đăng ký ({regs.length} lớp · {credits} tín
+                          chỉ)
+                        </h3>
                         {preview && (
                           <button onClick={() => setPreview(null)}>
                             Bỏ xem trước
                           </button>
                         )}
                       </div>
-                      {regs.map((e) => (
-                        <div className="enrolled" key={e.id}>
-                          <b>{e.offering.code}</b>
-                          <span>{e.offering.name}</span>
+                      {!regs.length ? (
+                        <div className="dash-empty-cta">
+                          <span>
+                            Bạn chưa đăng ký lớp học phần nào trong học kỳ
+                            2026-1.
+                          </span>
                           <button
                             className="text-button"
-                            style={{ color: "#ef4444", marginLeft: "auto" }}
-                            onClick={async () => {
-                              if (
-                                !window.confirm(
-                                  `Bạn có chắc muốn hủy đăng ký môn ${e.offering.code} - ${e.offering.name}?`,
-                                )
-                              )
-                                return;
-                              try {
-                                await api.cancel(e.id);
-                                await load();
-                                notify(`Đã hủy đăng ký môn ${e.offering.name}`);
-                              } catch (err: unknown) {
-                                const msg =
-                                  err instanceof Error
-                                    ? err.message
-                                    : "Không thể hủy môn";
-                                notify(msg);
-                              }
-                            }}
+                            onClick={() => nav("/courses")}
                           >
-                            Hủy đăng ký
+                            Tra cứu & đăng ký học phần →
                           </button>
                         </div>
-                      ))}
+                      ) : (
+                        <div className="tt-enrolled-list">
+                          {regs.map((e) => {
+                            const palette =
+                              TIMETABLE_PALETTES[
+                                e.offering.courseId % TIMETABLE_PALETTES.length
+                              ];
+                            return (
+                              <div className="tt-enrolled-card" key={e.id}>
+                                <span
+                                  className="tt-color-dot"
+                                  style={{ background: palette.accent }}
+                                />
+                                <div className="tt-enrolled-main">
+                                  <div className="tt-enrolled-top">
+                                    <b>{e.offering.code}</b>
+                                    <span className="pill">
+                                      Lớp {e.offering.section}
+                                    </span>
+                                    <span className="pill">
+                                      {e.offering.credits} TC
+                                    </span>
+                                  </div>
+                                  <div className="tt-enrolled-name">
+                                    {e.offering.name}
+                                  </div>
+                                  <div className="tt-enrolled-meta">
+                                    <span>GV: {e.offering.instructor}</span>
+                                    <span>·</span>
+                                    <span>Phòng {e.offering.room}</span>
+                                    {e.offering.schedule.map((s, idx) => (
+                                      <span key={idx} className="tt-slot-chip">
+                                        {s.day === 7 ? "CN" : `T${s.day + 1}`} ·{" "}
+                                        {s.start}–{s.end}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                                <button
+                                  type="button"
+                                  className="btn-danger-soft"
+                                  onClick={async () => {
+                                    if (
+                                      !window.confirm(
+                                        `Bạn có chắc muốn hủy đăng ký môn ${e.offering.code} - ${e.offering.name}?`,
+                                      )
+                                    )
+                                      return;
+                                    try {
+                                      await api.cancel(e.id);
+                                      await load();
+                                      notify(
+                                        `Đã hủy đăng ký môn ${e.offering.name}`,
+                                      );
+                                    } catch (err: unknown) {
+                                      const msg =
+                                        err instanceof Error
+                                          ? err.message
+                                          : "Không thể hủy môn";
+                                      notify(msg);
+                                    }
+                                  }}
+                                >
+                                  Hủy đăng ký
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                     </section>
                   </>
                 ) : (
@@ -455,17 +792,51 @@ export default function App() {
             />
             <Route
               path="/waitlist"
-              element={week >= 4 ? <Waitlist notify={notify} changed={load} /> : <Navigate to="/" />}
+              element={
+                week >= 4 ? (
+                  <Waitlist notify={notify} changed={load} />
+                ) : (
+                  <Navigate to="/" />
+                )
+              }
+            />
+            <Route
+              path="/prerequisites"
+              element={
+                <Suspense
+                  fallback={
+                    <div className="skeleton">Đang tải sơ đồ tiên quyết…</div>
+                  }
+                >
+                  <PrerequisiteGraphView notify={notify} />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/academic-record"
+              element={
+                <Suspense
+                  fallback={
+                    <div className="skeleton">Đang tải hồ sơ học tập…</div>
+                  }
+                >
+                  <AcademicRecordView notify={notify} />
+                </Suspense>
+              }
             />
             <Route
               path="/admin/*"
               element={
                 session.user.role === "admin" ? (
-                  <div className="panel">
-                    <span className="eyebrow">KHÔNG GIAN QUẢN TRỊ</span>
-                    <h1>Quản trị học phần</h1>
-                    {location.pathname.includes("/prereqs") ? <AdminPrereqs notify={notify} /> : <AdminCourses notify={notify} />}
-                  </div>
+                  <Suspense
+                    fallback={
+                      <div className="skeleton">
+                        Đang tải không gian quản trị…
+                      </div>
+                    }
+                  >
+                    <AdminPanel notify={notify} />
+                  </Suspense>
                 ) : (
                   <Navigate to="/" replace />
                 )
@@ -558,7 +929,9 @@ function Courses({
       const check = await api.check(selected.courseId);
       if (check.eligible) {
         if (regsCredits + selected.credits > maxCredits) {
-          setReason(`Cảnh báo: đăng ký lớp này sẽ vượt hạn mức ${maxCredits} tín chỉ. Hệ thống vẫn gửi yêu cầu để máy chủ quyết định.`);
+          setReason(
+            `Cảnh báo: đăng ký lớp này sẽ vượt hạn mức ${maxCredits} tín chỉ. Hệ thống vẫn gửi yêu cầu để máy chủ quyết định.`,
+          );
         }
         try {
           const key = `web-${selected.id}-${Date.now()}`;
@@ -729,8 +1102,80 @@ function Courses({
                 {items.map((o) => (
                   <tr key={o.id}>
                     <td>
-                      <b className="course-code">{o.code}</b>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 6,
+                          marginBottom: 4,
+                        }}
+                      >
+                        <b className="course-code" style={{ marginBottom: 0 }}>
+                          {o.code}
+                        </b>
+                        {o.eligibilityStatus === "RECOMMENDED" && (
+                          <span
+                            style={{
+                              fontSize: 10,
+                              fontWeight: 700,
+                              padding: "2px 6px",
+                              borderRadius: 999,
+                              background: "#e8f1fb",
+                              color: "#00529c",
+                            }}
+                          >
+                            Đúng tiến độ
+                          </span>
+                        )}
+                        {o.eligibilityStatus === "ELIGIBLE" && (
+                          <span
+                            style={{
+                              fontSize: 10,
+                              fontWeight: 700,
+                              padding: "2px 6px",
+                              borderRadius: 999,
+                              background: "#ecfdf5",
+                              color: "#047857",
+                            }}
+                          >
+                            Đủ điều kiện
+                          </span>
+                        )}
+                        {o.eligibilityStatus === "LOCKED" && (
+                          <span
+                            style={{
+                              fontSize: 10,
+                              fontWeight: 700,
+                              padding: "2px 6px",
+                              borderRadius: 999,
+                              background: "#fdecee",
+                              color: "#d71920",
+                            }}
+                          >
+                            Chưa đủ ĐK
+                          </span>
+                        )}
+                        {o.eligibilityStatus === "COMPLETED" && (
+                          <span
+                            style={{
+                              fontSize: 10,
+                              fontWeight: 700,
+                              padding: "2px 6px",
+                              borderRadius: 999,
+                              background: "#f1f5f9",
+                              color: "#475569",
+                            }}
+                          >
+                            Đã hoàn thành
+                          </span>
+                        )}
+                      </div>
                       <strong>{o.name}</strong>
+                      <small className="muted" style={{ display: "block" }}>
+                        {(o.minAccumulatedCredits ?? 0) === 0
+                          ? "Mở năm 1 (0 TC tích lũy)"
+                          : `Yêu cầu ≥ ${o.minAccumulatedCredits} TC tích lũy`}
+                      </small>
                     </td>
                     <td>
                       <span className="credit">{o.credits}</span>
@@ -835,8 +1280,8 @@ function Courses({
               chỉ
             </p>
             <p className="muted">
-              Hệ thống sẽ kiểm tra điều kiện tiên quyết và ghi nhận đăng ký trực
-              tiếp vào CSDL khi đủ điều kiện.
+              Hệ thống sẽ tự động kiểm tra điều kiện tiên quyết, tín chỉ tích
+              lũy và lịch học trước khi xác nhận đăng ký.
             </p>
             {reason && (
               <div role="alert" className="notice">
@@ -857,75 +1302,262 @@ function Courses({
     </>
   );
 }
-function Waitlist({ notify, changed }: { notify: (s: string) => void; changed: () => Promise<void> }) {
-  const [items, setItems] = useState<Awaited<ReturnType<typeof api.getWaitlist>>["items"]>([]);
-  const load = async () => { try { setItems((await api.getWaitlist()).items); } catch (e) { notify((e as Error).message); } };
-  useEffect(() => { void load(); const timer = window.setInterval(load, 30000); const focus = () => void load(); window.addEventListener("focus", focus); return () => { window.clearInterval(timer); window.removeEventListener("focus", focus); }; }, []);
-  return <div><div className="page-heading"><div><div className="eyebrow">XẾP HÀNG HỌC PHẦN</div><h1>Danh sách chờ</h1><p className="muted">Vào trước, ra trước — khi có người hủy, bạn ở đầu hàng sẽ được tự động đăng ký.</p></div></div><section className="panel">{!items.length ? <p className="empty">Bạn chưa ở trong danh sách chờ nào.</p> : items.map((item) => <div className="enrolled" key={item.id}><b>{item.offering.code}</b><span>{item.offering.name} · Lớp {item.offering.section}</span><span className="pill">Vị trí {item.position}</span><small>Tham gia: {new Date(item.enqueuedAt).toLocaleString("vi-VN")}</small>{item.blockedReason && <small className="warning">Chưa thể đôn: {item.blockedReason === "SCHEDULE_CONFLICT" ? "trùng lịch học" : item.blockedReason === "CREDIT_LIMIT_EXCEEDED" ? "vượt hạn mức tín chỉ" : item.blockedReason}</small>}<button className="text-button" style={{ color: "#ef4444", marginLeft: "auto" }} onClick={async () => { try { await api.leaveWaitlist(item.id); await load(); await changed(); notify("Đã rời danh sách chờ"); } catch (e) { notify((e as Error).message); } }}>Rời hàng chờ</button></div>)}</section></div>;
+function Waitlist({
+  notify,
+  changed,
+}: {
+  notify: (s: string) => void;
+  changed: () => Promise<void>;
+}) {
+  const [items, setItems] = useState<
+    Awaited<ReturnType<typeof api.getWaitlist>>["items"]
+  >([]);
+  const prevRef = useRef<WaitlistSummary[]>([]);
+  const leftRef = useRef<Set<number>>(new Set());
+
+  const load = async () => {
+    try {
+      const nextItems = (await api.getWaitlist()).items;
+      const nextSummaries: WaitlistSummary[] = nextItems.map((it) => ({
+        id: it.id,
+        offeringId: it.offeringId,
+        code: it.offering.code,
+        name: it.offering.name,
+      }));
+      if (prevRef.current.length > 0) {
+        const missing = prevRef.current.filter(
+          (p) =>
+            !nextSummaries.some((n) => n.offeringId === p.offeringId) &&
+            !leftRef.current.has(p.id),
+        );
+        if (missing.length > 0) {
+          const activeRegs = await api.timetable();
+          const activeIds = new Set(activeRegs.map((r) => r.offering.id));
+          const promoted = detectPromotedWaitlist(
+            prevRef.current,
+            nextSummaries,
+            activeIds,
+            leftRef.current,
+          );
+          if (promoted.length > 0) {
+            await changed();
+            for (const p of promoted) {
+              notify(`🎉 Bạn đã được đăng ký vào lớp ${p.code} — ${p.name}!`);
+            }
+          }
+        }
+      }
+      prevRef.current = nextSummaries;
+      setItems(nextItems);
+    } catch (e) {
+      notify((e as Error).message);
+    }
+  };
+  useEffect(() => {
+    void load();
+    const timer = window.setInterval(load, 30000);
+    const focus = () => void load();
+    window.addEventListener("focus", focus);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", focus);
+    };
+  }, []);
+  return (
+    <div>
+      <div className="page-heading">
+        <div>
+          <div className="eyebrow">XẾP HÀNG HỌC PHẦN</div>
+          <h1>Danh sách chờ</h1>
+          <p className="muted">
+            Vào trước, ra trước — khi có người hủy, bạn ở đầu hàng sẽ được tự
+            động đăng ký.
+          </p>
+        </div>
+      </div>
+      <section className="panel">
+        {!items.length ? (
+          <p className="empty">Bạn chưa ở trong danh sách chờ nào.</p>
+        ) : (
+          items.map((item) => (
+            <div className="enrolled" key={item.id}>
+              <b>{item.offering.code}</b>
+              <span>
+                {item.offering.name} · Lớp {item.offering.section}
+              </span>
+              <span className="pill">Vị trí {item.position}</span>
+              <small>
+                Tham gia: {new Date(item.enqueuedAt).toLocaleString("vi-VN")}
+              </small>
+              {item.blockedReason && (
+                <small className="warning">
+                  Chưa thể đôn:{" "}
+                  {item.blockedReason === "SCHEDULE_CONFLICT"
+                    ? "trùng lịch học"
+                    : item.blockedReason === "CREDIT_LIMIT_EXCEEDED"
+                      ? "vượt hạn mức tín chỉ"
+                      : item.blockedReason}
+                </small>
+              )}
+              <button
+                className="text-button"
+                style={{ color: "#ef4444", marginLeft: "auto" }}
+                onClick={async () => {
+                  try {
+                    leftRef.current.add(item.id);
+                    await api.leaveWaitlist(item.id);
+                    await load();
+                    await changed();
+                    notify("Đã rời danh sách chờ");
+                  } catch (e) {
+                    leftRef.current.delete(item.id);
+                    notify((e as Error).message);
+                  }
+                }}
+              >
+                Rời hàng chờ
+              </button>
+            </div>
+          ))
+        )}
+      </section>
+    </div>
+  );
 }
 
-function AdminPrereqs({ notify }: { notify: (s: string) => void }) {
-  const [courses, setCourses] = useState<api.AdminCourse[]>([]); const [courseId, setCourseId] = useState(0); const [data, setData] = useState<api.AdminCoursePrereqsResponse | null>(null); const [busy, setBusy] = useState(false);
-  const load = async (id: number) => { setCourseId(id); if (!id) return setData(null); try { setData(await api.getAdminCoursePrerequisites(id)); } catch (e) { notify((e as Error).message); } };
-  useEffect(() => { void api.listAdminCourses().then((r) => setCourses(r.items)).catch((e) => notify((e as Error).message)); }, []);
-  async function add(e: FormEvent<HTMLFormElement>) { e.preventDefault(); const f = new FormData(e.currentTarget); const prereq = Number(f.get("prereq")); const type = String(f.get("type")) as "AND" | "OR"; const groupNo = type === "OR" ? Number(f.get("groupNo") || 1) : 0; if (!courseId || !prereq || courseId === prereq) return notify("Hãy chọn hai học phần khác nhau."); setBusy(true); try { await api.createAdminPrerequisite({ courseId: courseId, prereqCourseId: prereq, type, groupNo: groupNo }); await load(courseId); notify("Đã thêm điều kiện tiên quyết"); } catch (e) { const err = e as { code?: string; message?: string }; notify(err.code === "PREREQ_CYCLE" ? "Không thể thêm: quan hệ này tạo vòng lặp giữa các học phần." : err.message || "Không thể lưu điều kiện tiên quyết"); } finally { setBusy(false); } }
-  const remove = async (prereq: number) => { try { await api.deleteAdminPrerequisite(courseId, prereq); await load(courseId); notify("Đã xóa điều kiện tiên quyết"); } catch (e) { notify((e as Error).message); } };
-  return <div><p className="muted">Dữ liệu seed được thực hiện bằng lệnh <code>python -m app.seed</code>; hiện chưa có endpoint seed cho giao diện.</p><label>Chọn học phần<select value={courseId} onChange={e => void load(Number(e.target.value))}><option value={0}>-- Chọn --</option>{courses.map(c => <option key={c.id} value={c.id}>{c.code} · {c.name}</option>)}</select></label>{data && <><h3>{data.courseCode} · Điều kiện tiên quyết</h3><div className="panel"><b>AND — bắt buộc</b>{data.andPrerequisites.length ? data.andPrerequisites.map(p => <div className="enrolled" key={p.prereqCourseId}>{p.prereqCode} · {p.prereqName}<button onClick={() => void remove(p.prereqCourseId)}>Xóa</button></div>) : <p className="muted">Không có.</p>}{data.orGroups.map(g => <div key={g.groupNo}><b>OR nhóm {g.groupNo}</b>{g.options.map(p => <div className="enrolled" key={p.prereqCourseId}>{p.prereqCode} · {p.prereqName}<button onClick={() => void remove(p.prereqCourseId)}>Xóa</button></div>)}</div>)}</div><form className="panel actions" onSubmit={add}><select name="prereq" required defaultValue=""><option value="">Điều kiện mới</option>{courses.filter(c => c.id !== courseId).map(c => <option key={c.id} value={c.id}>{c.code} · {c.name}</option>)}</select><select name="type" defaultValue="AND"><option value="AND">AND</option><option value="OR">OR</option></select><input name="groupNo" type="number" min="1" defaultValue="1" placeholder="Số nhóm OR" /><button className="primary" disabled={busy}>{busy ? "Đang lưu…" : "Thêm"}</button></form></>}</div>;
-}
+const TIMETABLE_PALETTES = [
+  { bg: "#e8f1fb", border: "#b3d1f2", accent: "#00529c", text: "#00356b" },
+  { bg: "#ecfdf5", border: "#a7f3d0", accent: "#059669", text: "#065f46" },
+  { bg: "#fff7ed", border: "#fed7aa", accent: "#ea580c", text: "#9a3412" },
+  { bg: "#f3e8ff", border: "#d8b4fe", accent: "#7c3aed", text: "#5b21b6" },
+  { bg: "#ecfeff", border: "#a5f3fc", accent: "#0891b2", text: "#155e75" },
+  { bg: "#fdf2f8", border: "#fbcfe8", accent: "#db2777", text: "#9d174d" },
+];
 
-function AdminCourses({ notify }: { notify: (s: string) => void }) {
-  const [items, setItems] = useState<api.AdminCourse[]>([]); const [editing, setEditing] = useState<api.AdminCourse | null>(null); const [q, setQ] = useState("");
-  const load = async () => { try { setItems((await api.listAdminCourses(q ? `q=${encodeURIComponent(q)}` : "")).items); } catch (e) { notify((e as Error).message); } };
-  useEffect(() => { void load(); }, [q]);
-  return <div><div className="actions"><input placeholder="Tìm học phần…" value={q} onChange={e => setQ(e.target.value)} /><button className="primary" onClick={() => setEditing({ id: 0, code: "", name: "", credits: 3, description: "" })}>Thêm học phần</button></div><div className="table-scroll"><table><thead><tr><th>Mã</th><th>Tên học phần</th><th>Tín chỉ</th><th>Thao tác</th></tr></thead><tbody>{items.map(c => <tr key={c.id}><td><b>{c.code}</b></td><td>{c.name}</td><td>{c.credits}</td><td><button onClick={() => setEditing(c)}>Sửa</button> <button onClick={async () => { if (confirm(`Xóa ${c.code}?`)) { try { await api.deleteAdminCourse(c.id); await load(); notify("Đã xóa học phần"); } catch (e) { notify((e as Error).message); } } }}>Xóa</button></td></tr>)}</tbody></table></div>{editing && <CourseForm value={editing} close={() => setEditing(null)} save={async data => { try { if (editing.id) await api.updateAdminCourse(editing.id, data); else await api.createAdminCourse(data); setEditing(null); await load(); notify("Đã lưu học phần"); } catch (e) { notify((e as Error).message); } }} />}</div>;
-}
-
-function CourseForm({ value, close, save }: { value: api.AdminCourse; close: () => void; save: (data: Omit<api.AdminCourse, "id">) => Promise<void> }) { const [form, setForm] = useState({ code: value.code, name: value.name, credits: value.credits, description: value.description || "" }); return <div className="modal-backdrop"><form className="modal" onSubmit={e => { e.preventDefault(); void save(form); }}><h2>{value.id ? "Sửa học phần" : "Thêm học phần"}</h2><input required placeholder="Mã học phần" value={form.code} onChange={e => setForm({ ...form, code: e.target.value })} /><input required placeholder="Tên học phần" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} /><input required type="number" min="1" max="10" placeholder="Tín chỉ" value={form.credits} onChange={e => setForm({ ...form, credits: Number(e.target.value) })} /><textarea placeholder="Mô tả" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} /><div className="actions"><button type="button" onClick={close}>Đóng</button><button className="primary">Lưu</button></div></form></div>; }
-
-function Timetable({
+const Timetable = memo(function Timetable({
   regs,
   preview,
 }: {
   regs: Enrollment[];
   preview: Offering | null;
 }) {
+  const [focused, setFocused] = useState<Offering | null>(null);
   const list = [
     ...regs.map((e) => e.offering),
     ...(preview && !regs.some((e) => e.offering.id === preview.id)
       ? [preview]
       : []),
   ];
+  const totalSessions = regs.reduce(
+    (n, e) => n + e.offering.schedule.length,
+    0,
+  );
+  const dayNames = [
+    { short: "T2", full: "Thứ Hai", day: 1 },
+    { short: "T3", full: "Thứ Ba", day: 2 },
+    { short: "T4", full: "Thứ Tư", day: 3 },
+    { short: "T5", full: "Thứ Năm", day: 4 },
+    { short: "T6", full: "Thứ Sáu", day: 5 },
+    { short: "T7", full: "Thứ Bảy", day: 6 },
+    { short: "CN", full: "Chủ nhật", day: 7 },
+  ];
+
   return (
-    <section className="panel">
-      <div className="section-title">
-        <h3>Lịch học trong tuần</h3>
-        <span className="muted">● Đã đăng ký · ◌ Xem trước · ⚠ Trùng lịch</span>
+    <section className="panel tt-panel">
+      <div className="section-title" style={{ flexWrap: "wrap" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <h3>
+            <CalendarDays size={16} /> Thời khóa biểu tuần
+          </h3>
+          <span className="pill">{totalSessions} buổi / tuần</span>
+        </div>
+        <div className="tt-legend">
+          <span>
+            <i style={{ background: "#00529c" }} /> Đã đăng ký
+          </span>
+          <span>
+            <i
+              style={{
+                background: "transparent",
+                border: "1.5px dashed #00529c",
+              }}
+            />{" "}
+            Xem trước
+          </span>
+          <span>
+            <i style={{ background: "#d71920" }} /> Trùng lịch
+          </span>
+        </div>
       </div>
-      {!list.length && (
-        <p className="empty">Chưa đăng ký lớp nào trong kỳ này.</p>
+
+      {focused && (
+        <div className="tt-focus-bar">
+          <div>
+            <b>
+              {focused.code} — {focused.name}
+            </b>
+            <small>
+              Lớp {focused.section} · {focused.credits} TC · GV:{" "}
+              {focused.instructor} · Phòng {focused.room}
+            </small>
+          </div>
+          <button
+            type="button"
+            className="text-button"
+            onClick={() => setFocused(null)}
+          >
+            Đóng chi tiết
+          </button>
+        </div>
       )}
+
+      {!list.length && (
+        <p className="empty" style={{ padding: "18px 0 10px" }}>
+          Chưa đăng ký lớp nào trong kỳ này. Các khung giờ trống sẵn sàng để bạn
+          xếp lịch.
+        </p>
+      )}
+
       <div className="table-scroll">
         <div className="timetable">
           <div className="days">
-            <span>Giờ</span>
-            {[
-              "Thứ Hai",
-              "Thứ Ba",
-              "Thứ Tư",
-              "Thứ Năm",
-              "Thứ Sáu",
-              "Thứ Bảy",
-              "Chủ nhật",
-            ].map((d) => (
-              <b key={d}>{d}</b>
-            ))}
+            <span className="tt-corner">Giờ</span>
+            {dayNames.map((d) => {
+              const dayCount = list.reduce(
+                (n, o) => n + o.schedule.filter((s) => s.day === d.day).length,
+                0,
+              );
+              return (
+                <div
+                  key={d.full}
+                  className={`tt-day-head ${d.day >= 6 ? "is-weekend" : ""}`}
+                >
+                  <b>{d.full}</b>
+                  <span className="tt-day-sub">
+                    {dayCount > 0 ? `${dayCount} buổi` : "Trống"}
+                  </span>
+                </div>
+              );
+            })}
           </div>
           <div className="grid-body">
+            {/* Vertical column guides */}
+            <div className="tt-cols" aria-hidden="true">
+              <div />
+              {dayNames.map((d) => (
+                <div
+                  key={d.day}
+                  className={`tt-col ${d.day >= 6 ? "is-weekend" : ""}`}
+                />
+              ))}
+            </div>
+
             {Array.from({ length: 15 }, (_, i) => (
               <div className="hour" style={{ top: i * 52 }} key={i}>
-                <span>{i + 7}:00</span>
+                <span>{String(i + 7).padStart(2, "0")}:00</span>
               </div>
             ))}
+
             {list.flatMap((o) =>
               o.schedule.map((s, i) => {
                 const overlaps = list
@@ -942,45 +1574,58 @@ function Timetable({
                 const conflict = findSlotConflicts(o, s, list)
                   .map((item) => item.offering)
                   .filter(
-                    (item, index, all) =>
-                      all.findIndex((other) => other.id === item.id) === index,
+                    (item, idx, all) =>
+                      all.findIndex((other) => other.id === item.id) === idx,
                   );
+                const palette =
+                  TIMETABLE_PALETTES[o.courseId % TIMETABLE_PALETTES.length];
+                const isSelected = focused?.id === o.id;
+                const heightPx = Math.max(
+                  46,
+                  ((parseTime(s.end) - parseTime(s.start)) / 60) * 52 - 5,
+                );
                 return (
-                  <div
+                  <button
+                    type="button"
                     key={o.id + "-" + i}
+                    onClick={() => setFocused(isSelected ? null : o)}
                     title={
                       conflict.length
-                        ? "Trùng với " + conflict.map((c) => c.name).join(", ")
-                        : o.name
+                        ? "Trùng lịch với " +
+                          conflict.map((c) => c.name).join(", ")
+                        : `${o.code} — ${o.name} (${s.start}–${s.end}, Phòng ${o.room})`
                     }
                     className={
                       "lesson " +
                       (preview?.id === o.id ? "preview " : "") +
-                      (conflict.length ? "conflict" : "")
+                      (conflict.length ? "conflict " : "") +
+                      (isSelected ? "selected" : "")
                     }
                     style={{
-                      top: ((parseTime(s.start) - 420) / 60) * 52,
-                      left: `calc(52px + (100% - 52px) / 7 * ${s.day - 1} + (100% - 52px) / 7 * ${index / overlaps.length})`,
-                      width: `calc((100% - 52px) / 7 / ${overlaps.length} - 5px)`,
-                      height:
-                        ((parseTime(s.end) - parseTime(s.start)) / 60) * 52 - 4,
-                      background: ["#e7edff", "#e4f4ec", "#fff0d9", "#ede5fc"][
-                        o.courseId % 4
-                      ],
+                      top: ((parseTime(s.start) - 420) / 60) * 52 + 2,
+                      left: `calc(58px + (100% - 58px) / 7 * ${s.day - 1} + (100% - 58px) / 7 * ${index / overlaps.length} + 3px)`,
+                      width: `calc((100% - 58px) / 7 / ${overlaps.length} - 6px)`,
+                      height: heightPx,
+                      background: conflict.length ? undefined : palette.bg,
+                      borderColor: conflict.length ? undefined : palette.border,
+                      borderLeftColor: conflict.length
+                        ? "#d71920"
+                        : palette.accent,
+                      color: conflict.length ? undefined : palette.text,
                     }}
                   >
-                    <b>
-                      {conflict.length ? "⚠ " : ""}
-                      {o.code}
-                    </b>
-                    <span>{o.name}</span>
-                    <small>
-                      {s.start}–{s.end}
+                    <div className="lesson-head">
+                      <b>
+                        {conflict.length ? "⚠ " : ""}
+                        {o.code}
+                      </b>
+                      <span className="lesson-sec">{o.section}</span>
+                    </div>
+                    <span className="lesson-name">{o.name}</span>
+                    <small className="lesson-meta">
+                      {s.start}–{s.end} · {o.room}
                     </small>
-                    <small>
-                      {o.room} · Lớp {o.section}
-                    </small>
-                  </div>
+                  </button>
                 );
               }),
             )}
@@ -989,4 +1634,4 @@ function Timetable({
       </div>
     </section>
   );
-}
+});

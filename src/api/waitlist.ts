@@ -18,7 +18,9 @@ interface WaitlistApiItem extends Offering {
 }
 
 export async function getWaitlist(): Promise<Paginated<WaitlistEntry>> {
-  const data = await http<Paginated<WaitlistApiItem>>("/waitlist?page=1&page_size=100");
+  const data = await http<Paginated<WaitlistApiItem>>(
+    "/waitlist?page=1&page_size=100",
+  );
   return {
     ...data,
     items: data.items.map((item) => ({

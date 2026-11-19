@@ -4,7 +4,10 @@ export const messages: Record<string, string> = {
   FORBIDDEN: "Bạn không có quyền thực hiện thao tác này.",
   NOT_FOUND: "Không tìm thấy dữ liệu yêu cầu.",
   PREREQ_NOT_MET: "Bạn chưa hoàn thành điều kiện tiên quyết.",
+  MIN_ACCUMULATED_CREDITS_NOT_MET:
+    "Bạn chưa đạt số tín chỉ tích lũy tối thiểu cho học phần này.",
   CREDIT_LIMIT_EXCEEDED: "Thao tác vượt quá hạn mức tín chỉ.",
+  MAX_CREDITS_EXCEEDED: "Thao tác vượt quá hạn mức tín chỉ học kỳ.",
   SCHEDULE_CONFLICT: "Học phần bị trùng lịch với lớp đã chọn.",
   ALREADY_ENROLLED: "Bạn đã đăng ký học phần này.",
   CONCURRENT_UPDATE: "Dữ liệu vừa thay đổi. Vui lòng tải lại và thử lại.",

@@ -19,6 +19,14 @@ import random
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
+from app.core.faculty import (
+    FACULTY_CNTT,
+    FACULTY_DIEN,
+    FACULTY_QTKD,
+    PREFIX_TO_FACULTY,
+    course_allowed_for_faculty,
+)
+
 TERM = "2026-1"
 SEED = 20261
 ADMIN_EMAIL = "admin@uni.edu.vn"
@@ -43,6 +51,17 @@ _BASE_WAIT = datetime(2026, 8, 2, tzinfo=UTC)
 # --------------------------------------------------------------------------- kiểu dữ liệu
 
 
+_MIN_CREDITS_BY_LEVEL: dict[int, int] = {
+    1: 0,
+    2: 3,
+    3: 6,
+    4: 15,
+    5: 24,
+    6: 36,
+    7: 48,
+}
+
+
 @dataclass
 class CourseRow:
     code: str
@@ -50,6 +69,7 @@ class CourseRow:
     credits: int
     level: int  # tầng trong DAG (chỉ để sinh dữ liệu; không lưu DB)
     description: str | None = None
+    min_accumulated_credits: int = 0
 
 
 @dataclass
@@ -84,6 +104,8 @@ class StudentRow:
     role: str = "student"
     program: str | None = None
     max_credits: int = 25
+    accumulated_credits: int = 0
+    faculty: str | None = None
 
 
 @dataclass
@@ -352,7 +374,15 @@ def satisfies(code: str, completed: set[str], and_map: dict, or_map: dict) -> bo
 
 def _add_kit_courses(ds: Dataset) -> None:
     for code, name, level, and_list, or_groups in KIT_COURSES:
-        ds.courses.append(CourseRow(code, name, 3, level))
+        ds.courses.append(
+            CourseRow(
+                code,
+                name,
+                3,
+                level,
+                min_accumulated_credits=_MIN_CREDITS_BY_LEVEL[level],
+            )
+        )
         for p in and_list:
             ds.prereqs.append(PrereqRow(code, p, "AND", 0))
         for g, opts in enumerate(or_groups, start=1):
@@ -362,7 +392,15 @@ def _add_kit_courses(ds: Dataset) -> None:
 
 def _add_bas_courses(ds: Dataset) -> None:
     for i in range(1, 9):
-        ds.courses.append(CourseRow(f"BAS{100 + i}", f"Kỹ năng bổ trợ {i}", 3, 1))
+        ds.courses.append(
+            CourseRow(
+                f"BAS{100 + i}",
+                f"Kỹ năng bổ trợ {i}",
+                3,
+                1,
+                min_accumulated_credits=0,
+            )
+        )
 
 
 def _add_generated_courses(ds: Dataset, rng: random.Random) -> None:
@@ -387,21 +425,41 @@ def _add_generated_courses(ds: Dataset, rng: random.Random) -> None:
             counters[(prefix, level)] = n
             used.add(code)
             name = f"{rng.choice(_TOPICS[prefix])} {_LEVEL_LABEL[level]}"
-            ds.courses.append(CourseRow(code, name, rng.choice([2, 3, 3, 3, 4]), level))
+            ds.courses.append(
+                CourseRow(
+                    code,
+                    name,
+                    rng.choice([2, 3, 3, 3, 4]),
+                    level,
+                    min_accumulated_credits=_MIN_CREDITS_BY_LEVEL[level],
+                )
+            )
 
             if level >= 2:
+                course_faculty = PREFIX_TO_FACULTY.get(prefix)
+                prev_candidates = [
+                    c
+                    for c in by_level[level - 1]
+                    if course_allowed_for_faculty(c, course_faculty)
+                ] or by_level[level - 1]
                 chosen: set[str] = {
-                    rng.choice(by_level[level - 1])
-                }  # đảm bảo có chuỗi sâu đủ 7 tầng
-                lower = [c for lv in range(1, level) for c in by_level.get(lv, [])]
-                if level >= 3 and rng.random() < 0.45:
+                    rng.choice(prev_candidates)
+                }  # đảm bảo có chuỗi sâu đủ 7 tầng và khép kín trong khoa
+                lower = [
+                    c
+                    for lv in range(1, level)
+                    for c in by_level.get(lv, [])
+                    if course_allowed_for_faculty(c, course_faculty)
+                ]
+                if level >= 3 and lower and rng.random() < 0.45:
                     chosen.add(rng.choice(lower))
                 for p in sorted(chosen):
                     ds.prereqs.append(PrereqRow(code, p, "AND", 0))
                 groups = 0
                 for prob in (0.35, 0.10):
-                    if rng.random() < prob:
-                        opts = rng.sample([c for c in lower if c not in chosen], 2)
+                    pool = [c for c in lower if c not in chosen]
+                    if len(pool) >= 2 and rng.random() < prob:
+                        opts = rng.sample(pool, 2)
                         groups += 1
                         chosen.update(opts)
                         for o in sorted(opts):
@@ -513,6 +571,7 @@ def _kit_students(ds: Dataset, default_max: int) -> None:
                 "student",
                 "Công nghệ thông tin",
                 default_max,
+                faculty=FACULTY_CNTT,
             )
         )
         for code in courses:
@@ -532,20 +591,41 @@ def _generated_students(
     ordered = sorted(ds.courses, key=lambda c: (c.level, c.code))
     for n in range(55, total + 1):
         email = f"sv{n:04d}@{EMAIL_DOMAIN}"
+        if n == 55:
+            faculty = FACULTY_CNTT
+            program = "Công nghệ thông tin"
+        else:
+            roll = rng.random()
+            if roll < 0.70:
+                faculty = FACULTY_CNTT
+                program = rng.choice(_PROGRAMS)
+            elif roll < 0.85:
+                faculty = FACULTY_DIEN
+                program = "Kỹ thuật điện - điện tử"
+            else:
+                faculty = FACULTY_QTKD
+                program = "Quản trị kinh doanh"
         ds.students.append(
             StudentRow(
                 email,
                 f"SV{n:04d}",
                 _full_name(rng),
                 "student",
-                rng.choice(_PROGRAMS),
+                program,
                 default_max,
+                faculty=faculty,
             )
         )
+        if n == 55:
+            # sv0055: tân sinh viên năm nhất Khoa CNTT (0 tín chỉ tích lũy) dùng cho kịch bản demo
+            continue
         year = rng.choice([1, 1, 2, 2, 3, 3, 4])
         reach = 1.5 * year
         done: set[str] = set()
+        acc_credits = 0
         for c in ordered:  # theo tầng tăng dần => tiên quyết luôn được xét trước
+            if not course_allowed_for_faculty(c.code, faculty):
+                continue
             if c.level <= reach - 1:
                 p = 0.30
             elif c.level <= reach:
@@ -554,8 +634,13 @@ def _generated_students(
                 p = 0.06
             else:
                 continue
-            if satisfies(c.code, done, and_map, or_map) and rng.random() < p:
+            if (
+                acc_credits >= c.min_accumulated_credits
+                and satisfies(c.code, done, and_map, or_map)
+                and rng.random() < p
+            ):
                 done.add(c.code)
+                acc_credits += c.credits
                 grade = round(rng.uniform(5.0, 10.0), 1)
                 ds.completed.append(
                     CompletedRow(
@@ -597,6 +682,16 @@ def build_dataset(
             ADMIN_EMAIL, None, "Quản trị hệ thống", "admin", None, default_max_credits
         )
     )
+
+    # Đồng bộ accumulated_credits cho mọi sinh viên bằng đúng tổng tín chỉ các môn đã đạt
+    credits_by_code = {c.code: c.credits for c in ds.courses}
+    acc_by_email: dict[str, int] = {}
+    for comp in ds.completed:
+        acc_by_email[comp.student_email] = acc_by_email.get(
+            comp.student_email, 0
+        ) + credits_by_code.get(comp.course_code, 0)
+    for s in ds.students:
+        s.accumulated_credits = acc_by_email.get(s.email, 0)
 
     # enrolled_count luôn đúng bằng số đăng ký ACTIVE
     counts: dict[tuple[str, str], int] = {}

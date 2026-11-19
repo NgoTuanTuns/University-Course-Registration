@@ -1,4 +1,9 @@
-import type { PrerequisiteCheck, PrerequisiteExplain } from "../types";
+import type {
+  AcademicRecordResponse,
+  PrereqGraphResponse,
+  PrerequisiteCheck,
+  PrerequisiteExplain,
+} from "../types";
 import { http } from "./http";
 
 export const check = (courseId: number) =>
@@ -6,3 +11,9 @@ export const check = (courseId: number) =>
 
 export const explain = (courseId: number) =>
   http<PrerequisiteExplain>("/prerequisites/explain", "POST", { courseId });
+
+export const getPrerequisiteGraph = () =>
+  http<PrereqGraphResponse>("/prerequisites/graph");
+
+export const getAcademicRecord = () =>
+  http<AcademicRecordResponse>("/students/me/academic-record");

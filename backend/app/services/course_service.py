@@ -84,6 +84,7 @@ async def create_course(session: AsyncSession, data: CourseCreate) -> Course:
         code=code_normalized,
         name=name_normalized,
         credits=data.credits,
+        min_accumulated_credits=data.min_accumulated_credits,
         description=data.description.strip() if data.description else None,
     )
     session.add(course)
@@ -102,6 +103,8 @@ async def update_course(
         course.name = data.name.strip()
     if data.credits is not None:
         course.credits = data.credits
+    if data.min_accumulated_credits is not None:
+        course.min_accumulated_credits = data.min_accumulated_credits
     if data.description is not None:
         course.description = data.description.strip()
 

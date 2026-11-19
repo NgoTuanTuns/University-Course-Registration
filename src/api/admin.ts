@@ -90,7 +90,7 @@ export const getAdminCoursePrerequisites = (courseId: number) =>
   http<AdminCoursePrereqsResponse>(`/admin/prereqs/${courseId}`);
 
 export const listAdminPrerequisites = (courseId?: number) => {
-  const query = courseId ? `?courseId=${courseId}` : "";
+  const query = courseId ? `?course_id=${courseId}` : "";
   return http<AdminPrereqListPage>(`/admin/prereqs${query}`);
 };
 

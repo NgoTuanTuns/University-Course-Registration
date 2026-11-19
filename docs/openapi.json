@@ -1,6 +1,139 @@
 {
   "components": {
     "schemas": {
+      "AcademicRecordResponse": {
+        "properties": {
+          "accumulated_credits": {
+            "title": "Accumulated Credits",
+            "type": "integer"
+          },
+          "completed_count": {
+            "title": "Completed Count",
+            "type": "integer"
+          },
+          "completed_courses": {
+            "items": {
+              "$ref": "#/components/schemas/CompletedCourseOut"
+            },
+            "title": "Completed Courses",
+            "type": "array"
+          },
+          "faculty": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Faculty"
+          },
+          "full_name": {
+            "title": "Full Name",
+            "type": "string"
+          },
+          "gpa": {
+            "title": "Gpa",
+            "type": "number"
+          },
+          "max_credits": {
+            "title": "Max Credits",
+            "type": "integer"
+          },
+          "mssv": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mssv"
+          },
+          "program": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Program"
+          },
+          "student_id": {
+            "title": "Student Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "student_id",
+          "mssv",
+          "full_name",
+          "program",
+          "accumulated_credits",
+          "max_credits",
+          "gpa",
+          "completed_count",
+          "completed_courses"
+        ],
+        "title": "AcademicRecordResponse",
+        "type": "object"
+      },
+      "CompletedCourseOut": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "course_id": {
+            "title": "Course Id",
+            "type": "integer"
+          },
+          "credits": {
+            "title": "Credits",
+            "type": "integer"
+          },
+          "grade": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Grade"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "term": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Term"
+          }
+        },
+        "required": [
+          "course_id",
+          "code",
+          "name",
+          "credits",
+          "grade",
+          "term"
+        ],
+        "title": "CompletedCourseOut",
+        "type": "object"
+      },
       "CourseCreate": {
         "properties": {
           "code": {
@@ -28,6 +161,14 @@
             ],
             "description": "Mô tả học phần",
             "title": "Description"
+          },
+          "min_accumulated_credits": {
+            "default": 0,
+            "description": "Số tín chỉ tích lũy tối thiểu (0 - 150)",
+            "maximum": 150.0,
+            "minimum": 0.0,
+            "title": "Min Accumulated Credits",
+            "type": "integer"
           },
           "name": {
             "description": "Tên học phần",
@@ -104,6 +245,11 @@
           },
           "id": {
             "title": "Id",
+            "type": "integer"
+          },
+          "min_accumulated_credits": {
+            "default": 0,
+            "title": "Min Accumulated Credits",
             "type": "integer"
           },
           "name": {
@@ -227,6 +373,20 @@
             ],
             "description": "Mô tả học phần",
             "title": "Description"
+          },
+          "min_accumulated_credits": {
+            "anyOf": [
+              {
+                "maximum": 150.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Số tín chỉ tích lũy tối thiểu (0 - 150)",
+            "title": "Min Accumulated Credits"
           },
           "name": {
             "anyOf": [
@@ -419,6 +579,23 @@
             "title": "Credits",
             "type": "integer"
           },
+          "eligibility_status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "RECOMMENDED",
+                  "ELIGIBLE",
+                  "LOCKED",
+                  "COMPLETED"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Eligibility Status"
+          },
           "enrolled_count": {
             "title": "Enrolled Count",
             "type": "integer"
@@ -437,6 +614,11 @@
               }
             ],
             "title": "Instructor"
+          },
+          "min_accumulated_credits": {
+            "default": 0,
+            "title": "Min Accumulated Credits",
+            "type": "integer"
           },
           "my_status": {
             "anyOf": [
@@ -693,6 +875,141 @@
           "group_no"
         ],
         "title": "PrereqEdgeOut",
+        "type": "object"
+      },
+      "PrereqGraphEdgeOut": {
+        "properties": {
+          "course_id": {
+            "title": "Course Id",
+            "type": "integer"
+          },
+          "group_no": {
+            "title": "Group No",
+            "type": "integer"
+          },
+          "prereq_course_id": {
+            "title": "Prereq Course Id",
+            "type": "integer"
+          },
+          "type": {
+            "enum": [
+              "AND",
+              "OR"
+            ],
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "course_id",
+          "prereq_course_id",
+          "type",
+          "group_no"
+        ],
+        "title": "PrereqGraphEdgeOut",
+        "type": "object"
+      },
+      "PrereqGraphNodeOut": {
+        "properties": {
+          "and_prereqs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "And Prereqs",
+            "type": "array"
+          },
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "credits": {
+            "title": "Credits",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "level": {
+            "title": "Level",
+            "type": "integer"
+          },
+          "min_accumulated_credits": {
+            "title": "Min Accumulated Credits",
+            "type": "integer"
+          },
+          "missing_courses": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing Courses",
+            "type": "array"
+          },
+          "missing_credits": {
+            "default": 0,
+            "title": "Missing Credits",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "or_groups": {
+            "items": {
+              "$ref": "#/components/schemas/OrGroupOut"
+            },
+            "title": "Or Groups",
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "COMPLETED",
+              "ELIGIBLE",
+              "LOCKED"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "code",
+          "name",
+          "credits",
+          "min_accumulated_credits",
+          "level",
+          "status"
+        ],
+        "title": "PrereqGraphNodeOut",
+        "type": "object"
+      },
+      "PrereqGraphResponse": {
+        "properties": {
+          "edges": {
+            "items": {
+              "$ref": "#/components/schemas/PrereqGraphEdgeOut"
+            },
+            "title": "Edges",
+            "type": "array"
+          },
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/PrereqGraphNodeOut"
+            },
+            "title": "Nodes",
+            "type": "array"
+          },
+          "student_accumulated_credits": {
+            "title": "Student Accumulated Credits",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "student_accumulated_credits",
+          "nodes",
+          "edges"
+        ],
+        "title": "PrereqGraphResponse",
         "type": "object"
       },
       "PrereqItemOut": {
@@ -985,6 +1302,23 @@
             "title": "Credits",
             "type": "integer"
           },
+          "eligibility_status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "RECOMMENDED",
+                  "ELIGIBLE",
+                  "LOCKED",
+                  "COMPLETED"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Eligibility Status"
+          },
           "enrolled_count": {
             "title": "Enrolled Count",
             "type": "integer"
@@ -1007,6 +1341,11 @@
               }
             ],
             "title": "Instructor"
+          },
+          "min_accumulated_credits": {
+            "default": 0,
+            "title": "Min Accumulated Credits",
+            "type": "integer"
           },
           "my_status": {
             "anyOf": [
@@ -1113,9 +1452,25 @@
       },
       "UserOut": {
         "properties": {
+          "accumulated_credits": {
+            "default": 0,
+            "title": "Accumulated Credits",
+            "type": "integer"
+          },
           "email": {
             "title": "Email",
             "type": "string"
+          },
+          "faculty": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Faculty"
           },
           "full_name": {
             "title": "Full Name",
@@ -1229,6 +1584,23 @@
             "title": "Credits",
             "type": "integer"
           },
+          "eligibility_status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "RECOMMENDED",
+                  "ELIGIBLE",
+                  "LOCKED",
+                  "COMPLETED"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Eligibility Status"
+          },
           "enqueued_at": {
             "format": "date-time",
             "title": "Enqueued At",
@@ -1252,6 +1624,11 @@
               }
             ],
             "title": "Instructor"
+          },
+          "min_accumulated_credits": {
+            "default": 0,
+            "title": "Min Accumulated Credits",
+            "type": "integer"
           },
           "my_status": {
             "anyOf": [
@@ -2687,6 +3064,106 @@
         "summary": "Explain Prerequisites",
         "tags": [
           "prerequisites"
+        ]
+      }
+    },
+    "/api/v1/prerequisites/graph": {
+      "get": {
+        "description": "Trả toàn bộ đồ thị tiên quyết DAG kèm trạng thái COMPLETED / ELIGIBLE / LOCKED cho sinh viên hiện tại.",
+        "operationId": "get_prerequisite_graph_api_v1_prerequisites_graph_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrereqGraphResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Prerequisite Graph",
+        "tags": [
+          "prerequisites"
+        ]
+      }
+    },
+    "/api/v1/students/me/academic-record": {
+      "get": {
+        "description": "Trả về tổng tín chỉ tích lũy, GPA và danh sách các môn sinh viên đã hoàn thành.",
+        "operationId": "get_my_academic_record_api_v1_students_me_academic_record_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AcademicRecordResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get My Academic Record",
+        "tags": [
+          "students"
         ]
       }
     },

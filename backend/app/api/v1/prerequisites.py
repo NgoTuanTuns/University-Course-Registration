@@ -4,20 +4,27 @@ Không có logic nghiệp vụ (nằm ở services/prerequisite_engine.py)."""
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.db import get_session
 from app.core.errors import api_error
+from app.core.faculty import course_allowed_for_faculty
 from app.core.rate_limit import check_rate_limit
 from app.core.security import CurrentUser, get_current_user
+from app.models import CompletedCourse, Course, Prerequisite, Student
 from app.schemas.prerequisite import (
     OrGroupOut,
+    PrereqGraphEdgeOut,
+    PrereqGraphNodeOut,
+    PrereqGraphResponse,
     PrerequisiteCheckResponse,
     PrerequisiteExplainRequest,
     PrerequisiteExplainResponse,
 )
 from app.services import prerequisite_engine as engine
+from app.services.prerequisite_core import PrerequisiteGraph, evaluate
 
 router = APIRouter(prefix="/prerequisites", tags=["prerequisites"])
 
@@ -101,3 +108,123 @@ async def explain_prerequisites(
         )
     except engine.CourseNotFoundError:
         raise _not_found() from None
+
+
+@router.get("/graph", response_model=PrereqGraphResponse)
+async def get_prerequisite_graph(
+    session: Annotated[AsyncSession, Depends(get_session)],
+    user: Annotated[CurrentUser, Depends(get_current_user)],
+) -> PrereqGraphResponse:
+    """Trả toàn bộ đồ thị tiên quyết DAG kèm trạng thái COMPLETED / ELIGIBLE / LOCKED cho sinh viên hiện tại."""
+    courses = list(
+        (await session.execute(select(Course).order_by(Course.code))).scalars().all()
+    )
+    prereq_rows = list((await session.execute(select(Prerequisite))).scalars().all())
+    student = await session.get(Student, user.id)
+    student_acc = int(getattr(student, "accumulated_credits", 0) or 0)
+    student_faculty = (
+        getattr(student, "faculty", None)
+        if student and student.role == "student"
+        else None
+    )
+    if student_faculty:
+        courses = [
+            c for c in courses if course_allowed_for_faculty(c.code, student_faculty)
+        ]
+    allowed_course_ids = {c.id for c in courses}
+    prereq_rows = [
+        p
+        for p in prereq_rows
+        if p.course_id in allowed_course_ids
+        and p.prereq_course_id in allowed_course_ids
+    ]
+
+    completed_ids: set[int] = set(
+        (
+            await session.execute(
+                select(CompletedCourse.course_id).where(
+                    CompletedCourse.student_id == user.id
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    code_by_id = {c.id: c.code for c in courses}
+    raw_edges = [
+        (p.course_id, p.prereq_course_id, p.type, p.group_no) for p in prereq_rows
+    ]
+    graph = PrerequisiteGraph.from_edges(raw_edges)
+
+    # Tính tầng (level 1..N) dựa trên độ sâu dài nhất trong DAG
+    memo_level: dict[int, int] = {}
+
+    def calc_level(cid: int, visiting: set[int]) -> int:
+        if cid in memo_level:
+            return memo_level[cid]
+        if cid in visiting:
+            return 1
+        visiting.add(cid)
+        succs = graph.successors(cid)
+        lv = 1 if not succs else 1 + max(calc_level(p, visiting) for p in succs)
+        visiting.remove(cid)
+        memo_level[cid] = lv
+        return lv
+
+    nodes: list[PrereqGraphNodeOut] = []
+    for c in courses:
+        lv = calc_level(c.id, set())
+        and_codes = sorted(
+            code_by_id[p] for p in graph.and_prereqs.get(c.id, ()) if p in code_by_id
+        )
+        or_groups = [
+            OrGroupOut(
+                group_no=gno,
+                options=sorted(code_by_id[o] for o in members if o in code_by_id),
+            )
+            for gno, members in sorted(graph.or_groups.get(c.id, {}).items())
+        ]
+        if c.id in completed_ids:
+            status_val = "COMPLETED"
+            missing_credits = 0
+            missing_courses: list[str] = []
+        else:
+            ev = evaluate(graph, c.id, completed_ids)
+            missing_courses = [
+                code_by_id[m] for m in ev.missing_courses if m in code_by_id
+            ]
+            missing_credits = max(0, int(c.min_accumulated_credits) - student_acc)
+            status_val = (
+                "ELIGIBLE" if (ev.eligible and missing_credits == 0) else "LOCKED"
+            )
+        nodes.append(
+            PrereqGraphNodeOut(
+                id=c.id,
+                code=c.code,
+                name=c.name,
+                credits=c.credits,
+                min_accumulated_credits=c.min_accumulated_credits,
+                level=lv,
+                status=status_val,
+                missing_credits=missing_credits,
+                missing_courses=missing_courses,
+                and_prereqs=and_codes,
+                or_groups=or_groups,
+            )
+        )
+
+    edges = [
+        PrereqGraphEdgeOut(
+            course_id=p.course_id,
+            prereq_course_id=p.prereq_course_id,
+            type=p.type,  # type: ignore[arg-type]
+            group_no=p.group_no,
+        )
+        for p in prereq_rows
+    ]
+    return PrereqGraphResponse(
+        student_accumulated_credits=student_acc,
+        nodes=nodes,
+        edges=edges,
+    )
