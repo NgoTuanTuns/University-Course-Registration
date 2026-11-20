@@ -241,3 +241,16 @@ def test_all_schedules_inside_grid_hours(default):
 
 def test_term_is_current(default):
     assert {o.term for o in default.offerings} == {TERM}
+
+
+def test_loadtest_profile_has_five_small_shared_hot_offerings():
+    loadtest = build_dataset("loadtest")
+
+    assert [loadtest.offering(f"BAS{100 + i}").capacity for i in range(1, 6)] == [
+        5,
+        5,
+        5,
+        5,
+        5,
+    ]
+    assert loadtest.offering("BAS106").capacity == 60

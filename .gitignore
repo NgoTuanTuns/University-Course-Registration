@@ -67,4 +67,7 @@ desktop.ini
 *.swp
 *.swo
 *~
-loadtest/reports/
+loadtest/reports/*
+!loadtest/reports/.gitkeep
+loadtest/data/*
+!loadtest/data/.gitkeep

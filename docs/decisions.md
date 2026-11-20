@@ -34,7 +34,7 @@ Trạng thái: **Open**, **Decided**, hoặc **Deferred**. Khi chốt, điền c
 | D26 | Thêm router timetable.py | M3 | T1 | Thêm | Open | | |
 | D27 | CHECK jsonb_typeof(schedule) = array | M4 | T2 | Chỉ làm nếu nhóm đồng ý | Open | | |
 | D28 | Ngưỡng P95 và mức tối thiểu độ bao phủ | M5 + nhóm | Sau baseline | Quyết định từ số liệu thực | Open | | |
-| D29 | Mốc đo của bài tải 2.000 người dùng/30 giây | M5 | T2 | Đăng nhập trước; đo từ lúc bắt đầu đăng ký | Open | | |
+| D29 | Mốc đo của bài tải 2.000 người dùng/30 giây | M5 | T2 | Đăng nhập trước; đo từ lúc bắt đầu đăng ký | Decided | Pre-login toàn bộ user và giữ token; spike bắt đầu ở luồng tra cứu đầu tiên, tiếp tục qua tiên quyết, đăng ký và TKB. Báo cáo login riêng. | 20/11/2026, M5 |
 
 Ghi chú tài liệu nguồn: mục 1.4 của file M5 ghi 28 điểm, còn bảng Mục 9 liệt kê D01–D29 (29 điểm). Nhật ký này theo đủ 29 dòng của bảng Mục 9.
 ## Ghi chú hiện tại

@@ -63,6 +63,8 @@ Dự án bài tập lớn môn **Công nghệ Phần mềm**. Hệ thống quả
    - **Giao diện Web trực tiếp (Vite):** <http://localhost:5173>
    - **Tài liệu API Swagger UI:** <http://localhost:8000/docs>
 
+> Profile baseline tải có database/Redis riêng và script reset an toàn; xem [`loadtest/README.md`](loadtest/README.md). Không dùng lệnh seed `--reset` ở trên cho môi trường tải.
+
 ---
 
 ### Cách 2: Chế độ phát triển cục bộ Hybrid (Khuyên dùng khi lập trình trên Windows)
