@@ -2,6 +2,8 @@ import pytest
 
 from app.tools.reset_loadtest import validate_loadtest_target
 
+pytestmark = pytest.mark.unit
+
 SAFE_DB = "postgresql+asyncpg://course_user@db:5432/course_reg_loadtest"
 SAFE_REDIS = "redis://redis:6379/2"
 
