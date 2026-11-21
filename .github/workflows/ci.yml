@@ -57,10 +57,10 @@ jobs:
           PGPASSWORD="$POSTGRES_PASSWORD" psql -h localhost -U "$POSTGRES_USER" -d postgres -c "CREATE DATABASE $TEST_POSTGRES_DB OWNER $POSTGRES_USER"
       - name: Ruff lint
         working-directory: backend
-        run: ruff check app tests
+        run: ruff check --config pyproject.toml app tests ../loadtest/locustfile.py
       - name: Ruff format
         working-directory: backend
-        run: ruff format --check app tests
+        run: ruff format --check --config pyproject.toml app tests ../loadtest/locustfile.py
       - name: Upgrade database
         working-directory: backend
         run: alembic upgrade head

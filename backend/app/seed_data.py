@@ -474,7 +474,13 @@ def _random_schedule(rng: random.Random) -> list[dict]:
     return _sched([(d, slot[0], slot[1]) for d in sorted(days)])
 
 
-def _add_offerings(ds: Dataset, rng: random.Random, include_generated: bool) -> None:
+def _add_offerings(
+    ds: Dataset,
+    rng: random.Random,
+    include_generated: bool,
+    *,
+    loadtest: bool = False,
+) -> None:
     for code, sessions, cap in KIT_OFFERINGS:
         ds.offerings.append(
             OfferingRow(
@@ -492,7 +498,7 @@ def _add_offerings(ds: Dataset, rng: random.Random, include_generated: bool) -> 
                 f"BAS{100 + i}",
                 "01",
                 rng.choice(_INSTRUCTORS),
-                60,
+                5 if loadtest and i <= 5 else 60,
                 _sched([slot]),
                 f"B{rng.randint(1, 3)}-{rng.randint(101, 512)}",
             )
@@ -668,7 +674,12 @@ def build_dataset(
     _add_bas_courses(ds)
     if profile != "minimal":
         _add_generated_courses(ds, rng)
-    _add_offerings(ds, rng, include_generated=profile != "minimal")
+    _add_offerings(
+        ds,
+        rng,
+        include_generated=profile != "minimal",
+        loadtest=profile == "loadtest",
+    )
     _kit_students(ds, default_max_credits)
     if profile != "minimal":
         student_count = (

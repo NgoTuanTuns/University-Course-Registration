@@ -66,6 +66,77 @@ services:
       start_period: 20s
     restart: unless-stopped
 
+  # Isolated baseline environment. It is only started with --profile loadtest.
+  # It never points at course_reg or the normal Redis DB 0.
+  api-loadtest:
+    profiles: ["loadtest"]
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    working_dir: /app/backend
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
+    env_file:
+      - .env
+    environment:
+      APP_ENV: loadtest
+      LOADTEST_RUN_ID: ${LOADTEST_RUN_ID:-manual}
+      PYTHONPATH: /app/backend
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-course_user}:${POSTGRES_PASSWORD}@db:5432/course_reg_loadtest
+      TEST_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-course_user}:${POSTGRES_PASSWORD}@db:5432/course_reg_loadtest
+      REDIS_URL: redis://redis:6379/2
+      TEST_REDIS_URL: redis://redis:6379/2
+      DB_POOL_SIZE: 5
+      DB_MAX_OVERFLOW: 0
+    volumes:
+      - ./backend:/app/backend
+      - ./loadtest/data:/data
+      - ./loadtest/reports:/reports
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 20s
+    restart: "no"
+
+  locust:
+    profiles: ["loadtest"]
+    image: locustio/locust:2.47.0
+    working_dir: /mnt/locust
+    command:
+      - -f
+      - /mnt/locust/locustfile.py
+      - --headless
+      - --host
+      - http://api-loadtest:8000
+      - --csv
+      - /reports/${LOADTEST_RUN_ID:-manual}
+      - --html
+      - /reports/${LOADTEST_RUN_ID:-manual}.html
+      - --exit-code-on-error
+      - "1"
+    environment:
+      LOADTEST_TOKENS_FILE: /data/tokens.csv
+      LOADTEST_SCENARIO: ${LOADTEST_SCENARIO:-mixed}
+      LOADTEST_RUN_ID: ${LOADTEST_RUN_ID:-manual}
+      LOADTEST_USERS: ${LOADTEST_USERS:-2000}
+      LOADTEST_RAMP_SECONDS: ${LOADTEST_RAMP_SECONDS:-30}
+      LOADTEST_HOLD_SECONDS: ${LOADTEST_HOLD_SECONDS:-150}
+      LOADTEST_TERM: ${LOADTEST_TERM:-2026-1}
+    volumes:
+      - ./loadtest:/mnt/locust:ro
+      - ./loadtest/data:/data:ro
+      - ./loadtest/reports:/reports
+    depends_on:
+      api-loadtest:
+        condition: service_healthy
+    restart: "no"
+
   db:
     image: postgres:15.16-alpine3.23
     environment:
@@ -78,6 +149,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./docker/postgres/init-test-db.sh:/docker-entrypoint-initdb.d/10-create-test-db.sh:ro
+      - ./docker/postgres/create-loadtest-db.sh:/docker-entrypoint-initdb.d/20-create-loadtest-db.sh:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-course_user} -d ${POSTGRES_DB:-course_reg}"]
       interval: 5s

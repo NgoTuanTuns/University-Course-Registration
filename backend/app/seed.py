@@ -260,12 +260,15 @@ def _report(args: argparse.Namespace, counts: dict[str, int]) -> None:
     logger.info("Seed profile '%s' xong:", args.profile)
     for table, n in counts.items():
         logger.info("  %-18s %6d", table, n)
-    logger.info(
-        "Admin: %s / %s   |   Sinh viên: svNNNN@uni.edu.vn / %s",
-        ADMIN_EMAIL,
-        ADMIN_PASSWORD,
-        STUDENT_PASSWORD,
-    )
+    if args.profile == "loadtest":
+        logger.info("Load-test credentials are written to the protected export CSV.")
+    else:
+        logger.info(
+            "Admin: %s / %s   |   Sinh viên: svNNNN@uni.edu.vn / %s",
+            ADMIN_EMAIL,
+            ADMIN_PASSWORD,
+            STUDENT_PASSWORD,
+        )
 
 
 async def main_async(args: argparse.Namespace) -> int:
