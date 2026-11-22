@@ -6,3 +6,5 @@ export * from "./enroll";
 export * from "./waitlist";
 export * from "./admin";
 export * from "./studyPlans";
+export * from "./registrationPhase";
+export * from "./scheduler";

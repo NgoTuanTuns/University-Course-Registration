@@ -29,3 +29,32 @@ export async function enroll(
 export async function cancel(enrollmentId: number): Promise<EnrollResult> {
   return http<EnrollResult>(`/enroll/${enrollmentId}`, "DELETE");
 }
+
+export interface SwapResult {
+  fromEnrollmentId: number;
+  newEnrollmentId: number;
+  fromOfferingId: number;
+  toOfferingId: number;
+  status: "SWAPPED";
+  version: number;
+  promotedStudentId?: number | null;
+}
+
+export async function swapSection(
+  fromEnrollmentId: number,
+  toOfferingId: number,
+  idempotencyKey?: string,
+): Promise<SwapResult> {
+  const headers: Record<string, string> = {};
+  if (idempotencyKey) {
+    headers["Idempotency-Key"] = idempotencyKey;
+  }
+  return http<SwapResult>(
+    "/enroll/swap",
+    "POST",
+    { fromEnrollmentId, toOfferingId },
+    undefined,
+    true,
+    headers,
+  );
+}

@@ -116,3 +116,27 @@ export const deleteAdminPrerequisite = (
     `/admin/prereqs/${courseId}/${prereqCourseId}`,
     "DELETE",
   );
+
+// ---------------------------------------------------------------------------
+// 3. Quản trị sĩ số lớp học phần phục vụ test đầy lớp / Waitlist
+// ---------------------------------------------------------------------------
+export interface AdminOfferingCapacityActionResponse {
+  offeringId: number;
+  enrolledCount: number;
+  capacity: number;
+  addedCount?: number;
+  promotedStudentId?: number | null;
+  message: string;
+}
+
+export const fillAdminOffering = (offeringId: number) =>
+  http<AdminOfferingCapacityActionResponse>(
+    `/admin/offerings/${offeringId}/fill`,
+    "POST",
+  );
+
+export const releaseAdminOfferingSeat = (offeringId: number) =>
+  http<AdminOfferingCapacityActionResponse>(
+    `/admin/offerings/${offeringId}/release-seat`,
+    "POST",
+  );
