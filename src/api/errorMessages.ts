@@ -6,6 +6,10 @@ export const messages: Record<string, string> = {
   PREREQ_NOT_MET: "Bạn chưa hoàn thành điều kiện tiên quyết.",
   MIN_ACCUMULATED_CREDITS_NOT_MET:
     "Bạn chưa đạt số tín chỉ tích lũy tối thiểu cho học phần này.",
+  STUDY_PLAN_PERIOD_CLOSED:
+    "Đợt Đăng ký Kế hoạch học tập đã kết thúc. Không thể thêm hoặc xóa học phần.",
+  COURSE_NOT_OPENED:
+    "Học phần này không mở lớp trong học kỳ do không đủ số lượng sinh viên ĐKKHHT.",
   CREDIT_LIMIT_EXCEEDED: "Thao tác vượt quá hạn mức tín chỉ.",
   MAX_CREDITS_EXCEEDED: "Thao tác vượt quá hạn mức tín chỉ học kỳ.",
   SCHEDULE_CONFLICT: "Học phần bị trùng lịch với lớp đã chọn.",

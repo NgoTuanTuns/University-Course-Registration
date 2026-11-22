@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import * as api from "../../api";
+import type { AdminStudyPlanSummaryResponse } from "../../types";
 import { formatPrereqCycleMessage } from "../registration/helpers";
 
 export default function AdminPanel({
@@ -9,12 +10,14 @@ export default function AdminPanel({
   notify: (s: string) => void;
 }) {
   return (
-    <div className="panel">
-      <span className="eyebrow">KHÔNG GIAN QUẢN TRỊ</span>
-      <h1>Quản trị hệ thống</h1>
+    <div>
       <Routes>
         <Route path="courses" element={<AdminCourses notify={notify} />} />
         <Route path="prereqs" element={<AdminPrereqs notify={notify} />} />
+        <Route
+          path="study-plans"
+          element={<AdminStudyPlans notify={notify} />}
+        />
         <Route path="*" element={<Navigate to="/admin/courses" replace />} />
       </Routes>
     </div>
@@ -50,16 +53,13 @@ function AdminCourses({ notify }: { notify: (s: string) => void }) {
 
   return (
     <div>
-      <div className="actions" style={{ marginBottom: 16 }}>
-        <input
-          aria-label="Tìm học phần quản trị"
-          placeholder="Tìm theo mã hoặc tên học phần…"
-          value={q}
-          onChange={(e) => {
-            setQ(e.target.value);
-            setPage(1);
-          }}
-        />
+      <div className="page-heading">
+        <div>
+          <h1>Quản trị học phần</h1>
+          <p className="muted">
+            Thêm mới, cập nhật hoặc xóa học phần trong danh mục đào tạo.
+          </p>
+        </div>
         <button
           className="primary"
           onClick={() =>
@@ -75,63 +75,105 @@ function AdminCourses({ notify }: { notify: (s: string) => void }) {
           Thêm học phần
         </button>
       </div>
-      <div className="table-scroll">
-        <table>
-          <thead>
-            <tr>
-              <th>Mã</th>
-              <th>Tên học phần</th>
-              <th>Tín chỉ</th>
-              <th>Thao tác</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((c) => (
-              <tr key={c.id}>
-                <td>
-                  <b>{c.code}</b>
-                </td>
-                <td>{c.name}</td>
-                <td>{c.credits}</td>
-                <td>
-                  <button onClick={() => setEditing(c)}>Sửa</button>{" "}
-                  <button
-                    onClick={async () => {
-                      if (window.confirm(`Bạn có chắc muốn xóa ${c.code}?`)) {
-                        try {
-                          await api.deleteAdminCourse(c.id);
-                          await load(page, q);
-                          notify("Đã xóa học phần");
-                        } catch (e) {
-                          notify((e as Error).message);
-                        }
-                      }
-                    }}
-                  >
-                    Xóa
-                  </button>
-                </td>
+
+      <section className="panel">
+        <div
+          className="actions"
+          style={{ marginBottom: 16, alignItems: "center" }}
+        >
+          <input
+            aria-label="Tìm học phần quản trị"
+            placeholder="Tìm theo mã hoặc tên học phần…"
+            value={q}
+            style={{ marginTop: 0, maxWidth: 420 }}
+            onChange={(e) => {
+              setQ(e.target.value);
+              setPage(1);
+            }}
+          />
+          <span className="muted" style={{ marginLeft: "auto" }}>
+            Tổng {total} học phần
+          </span>
+        </div>
+
+        <div className="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Mã môn</th>
+                <th>Tên học phần</th>
+                <th>Tín chỉ</th>
+                <th style={{ width: 160 }}>Thao tác</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <div className="pagination">
-        <span className="muted">Tổng {total} học phần</span>
-        <button
-          disabled={page <= 1}
-          onClick={() => setPage((p) => Math.max(1, p - 1))}
-        >
-          ← Trước
-        </button>
-        <b>{page}</b>
-        <button
-          disabled={page * pageSize >= total}
-          onClick={() => setPage((p) => p + 1)}
-        >
-          Sau →
-        </button>
-      </div>
+            </thead>
+            <tbody>
+              {items.map((c) => (
+                <tr key={c.id}>
+                  <td>
+                    <b className="mono-id">{c.code}</b>
+                  </td>
+                  <td>{c.name}</td>
+                  <td>{c.credits}</td>
+                  <td>
+                    <div className="actions">
+                      <button
+                        type="button"
+                        className="btn-outline"
+                        onClick={() => setEditing(c)}
+                      >
+                        Sửa
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-danger-soft"
+                        onClick={async () => {
+                          if (
+                            window.confirm(`Bạn có chắc muốn xóa ${c.code}?`)
+                          ) {
+                            try {
+                              await api.deleteAdminCourse(c.id);
+                              await load(page, q);
+                              notify("Đã xóa học phần");
+                            } catch (e) {
+                              notify((e as Error).message);
+                            }
+                          }
+                        }}
+                      >
+                        Xóa
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="pagination">
+          <span className="muted">
+            Trang {page} / {Math.max(1, Math.ceil(total / pageSize))}
+          </span>
+          <button
+            type="button"
+            className="btn-outline"
+            disabled={page <= 1}
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+          >
+            Trước
+          </button>
+          <b>{page}</b>
+          <button
+            type="button"
+            className="btn-outline"
+            disabled={page * pageSize >= total}
+            onClick={() => setPage((p) => p + 1)}
+          >
+            Sau
+          </button>
+        </div>
+      </section>
+
       {editing && (
         <CourseForm
           value={editing}
@@ -246,81 +288,146 @@ function AdminPrereqs({ notify }: { notify: (s: string) => void }) {
 
   return (
     <div>
-      <p className="muted">
-        Dữ liệu seed được thực hiện bằng lệnh <code>python -m app.seed</code>;
-        hiện chưa có endpoint seed cho giao diện.
-      </p>
-      <label>
-        Chọn học phần ({courses.length} môn)
-        <select
-          value={courseId}
-          onChange={(e) => void load(Number(e.target.value))}
-        >
-          <option value={0}>-- Chọn --</option>
-          {courses.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.code} · {c.name}
-            </option>
-          ))}
-        </select>
-      </label>
+      <div className="page-heading">
+        <div>
+          <h1>Cấu hình điều kiện tiên quyết</h1>
+          <p className="muted">
+            Thiết lập môn bắt buộc (AND) hoặc nhóm môn thay thế (OR) cho từng
+            học phần. Hệ thống tự động chặn chu trình trên đồ thị DAG.
+          </p>
+        </div>
+        <span className="pill">{courses.length} học phần</span>
+      </div>
+
+      <section className="panel" style={{ marginBottom: 20 }}>
+        <label style={{ maxWidth: 520 }}>
+          Chọn học phần cần cấu hình
+          <select
+            value={courseId}
+            onChange={(e) => void load(Number(e.target.value))}
+          >
+            <option value={0}>-- Chọn học phần --</option>
+            {courses.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.code} — {c.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      </section>
+
       {data && (
         <>
-          <h3>{data.courseCode} · Điều kiện tiên quyết</h3>
-          <div className="panel">
-            <b>AND — bắt buộc</b>
-            {data.andPrerequisites.length ? (
-              data.andPrerequisites.map((p) => (
-                <div className="enrolled" key={p.prereqCourseId}>
-                  {p.prereqCode} · {p.prereqName}
-                  <button onClick={() => void remove(p.prereqCourseId)}>
-                    Xóa
-                  </button>
-                </div>
-              ))
-            ) : (
-              <p className="muted">Không có.</p>
-            )}
+          <section className="panel" style={{ marginBottom: 20 }}>
+            <div className="section-title">
+              <h3>
+                <span className="mono-id">{data.courseCode}</span> — Điều kiện
+                tiên quyết hiện tại
+              </h3>
+            </div>
+
+            <div style={{ marginBottom: 20 }}>
+              <h4 style={{ marginBottom: 10 }}>Môn bắt buộc (AND)</h4>
+              {data.andPrerequisites.length ? (
+                data.andPrerequisites.map((p) => (
+                  <div className="enrolled" key={p.prereqCourseId}>
+                    <div>
+                      <b className="mono-id" style={{ marginRight: 10 }}>
+                        {p.prereqCode}
+                      </b>
+                      <span>{p.prereqName}</span>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn-danger-soft"
+                      onClick={() => void remove(p.prereqCourseId)}
+                    >
+                      Xóa
+                    </button>
+                  </div>
+                ))
+              ) : (
+                <p className="muted">Chưa có môn tiên quyết bắt buộc.</p>
+              )}
+            </div>
+
             {data.orGroups.map((g) => (
-              <div key={g.groupNo}>
-                <b>OR nhóm {g.groupNo}</b>
+              <div key={g.groupNo} style={{ marginTop: 18 }}>
+                <h4 style={{ marginBottom: 10 }}>
+                  Nhóm lựa chọn thay thế (OR nhóm {g.groupNo})
+                </h4>
                 {g.options.map((p) => (
                   <div className="enrolled" key={p.prereqCourseId}>
-                    {p.prereqCode} · {p.prereqName}
-                    <button onClick={() => void remove(p.prereqCourseId)}>
+                    <div>
+                      <b className="mono-id" style={{ marginRight: 10 }}>
+                        {p.prereqCode}
+                      </b>
+                      <span>{p.prereqName}</span>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn-danger-soft"
+                      onClick={() => void remove(p.prereqCourseId)}
+                    >
                       Xóa
                     </button>
                   </div>
                 ))}
               </div>
             ))}
-          </div>
-          <form className="panel actions" onSubmit={add}>
-            <select name="prereq" required defaultValue="">
-              <option value="">Điều kiện mới</option>
-              {courses
-                .filter((c) => c.id !== courseId)
-                .map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.code} · {c.name}
-                  </option>
-                ))}
-            </select>
-            <select name="type" defaultValue="AND">
-              <option value="AND">AND</option>
-              <option value="OR">OR</option>
-            </select>
-            <input
-              name="groupNo"
-              type="number"
-              min="1"
-              defaultValue="1"
-              placeholder="Số nhóm OR"
-            />
-            <button className="primary" disabled={busy}>
-              {busy ? "Đang lưu…" : "Thêm"}
-            </button>
-          </form>
+          </section>
+
+          <section className="panel">
+            <h3 style={{ marginBottom: 14 }}>Thêm điều kiện tiên quyết mới</h3>
+            <form
+              onSubmit={add}
+              style={{
+                display: "grid",
+                gridTemplateColumns:
+                  "minmax(240px, 2fr) minmax(110px, 140px) minmax(110px, 140px) auto",
+                gap: 12,
+                alignItems: "end",
+              }}
+            >
+              <label>
+                Học phần tiên quyết
+                <select name="prereq" required defaultValue="">
+                  <option value="">-- Chọn học phần --</option>
+                  {courses
+                    .filter((c) => c.id !== courseId)
+                    .map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.code} — {c.name}
+                      </option>
+                    ))}
+                </select>
+              </label>
+              <label>
+                Loại ràng buộc
+                <select name="type" defaultValue="AND">
+                  <option value="AND">AND (bắt buộc)</option>
+                  <option value="OR">OR (thay thế)</option>
+                </select>
+              </label>
+              <label>
+                Số nhóm OR
+                <input
+                  name="groupNo"
+                  type="number"
+                  min="1"
+                  defaultValue="1"
+                  placeholder="1"
+                />
+              </label>
+              <button
+                className="primary"
+                disabled={busy}
+                style={{ height: 42, padding: "0 20px" }}
+              >
+                {busy ? "Đang lưu…" : "Thêm điều kiện"}
+              </button>
+            </form>
+          </section>
         </>
       )}
     </div>
@@ -343,7 +450,12 @@ function CourseForm({
     description: value.description || "",
   });
   return (
-    <div className="modal-backdrop">
+    <div
+      className="modal-backdrop"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) close();
+      }}
+    >
       <form
         className="modal"
         role="dialog"
@@ -353,42 +465,326 @@ function CourseForm({
           void save(form);
         }}
       >
-        <h2>{value.id ? "Sửa học phần" : "Thêm học phần"}</h2>
-        <input
-          required
-          placeholder="Mã học phần"
-          value={form.code}
-          onChange={(e) => setForm({ ...form, code: e.target.value })}
-        />
-        <input
-          required
-          placeholder="Tên học phần"
-          value={form.name}
-          onChange={(e) => setForm({ ...form, name: e.target.value })}
-        />
-        <input
-          required
-          type="number"
-          min="1"
-          max="10"
-          placeholder="Tín chỉ"
-          value={form.credits}
-          onChange={(e) =>
-            setForm({ ...form, credits: Number(e.target.value) })
-          }
-        />
-        <textarea
-          placeholder="Mô tả"
-          value={form.description}
-          onChange={(e) => setForm({ ...form, description: e.target.value })}
-        />
+        <h2>{value.id ? "Cập nhật học phần" : "Thêm học phần mới"}</h2>
+        <div style={{ display: "grid", gap: 14, marginTop: 14 }}>
+          <label>
+            Mã học phần
+            <input
+              required
+              placeholder="Ví dụ: INT321"
+              value={form.code}
+              onChange={(e) => setForm({ ...form, code: e.target.value })}
+            />
+          </label>
+          <label>
+            Tên học phần
+            <input
+              required
+              placeholder="Nhập tên học phần"
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+            />
+          </label>
+          <label>
+            Số tín chỉ
+            <input
+              required
+              type="number"
+              min="1"
+              max="10"
+              value={form.credits}
+              onChange={(e) =>
+                setForm({ ...form, credits: Number(e.target.value) })
+              }
+            />
+          </label>
+          <label>
+            Mô tả học phần
+            <textarea
+              placeholder="Mô tả ngắn gọn nội dung học phần"
+              value={form.description}
+              onChange={(e) =>
+                setForm({ ...form, description: e.target.value })
+              }
+            />
+          </label>
+        </div>
         <div className="actions">
-          <button type="button" onClick={close}>
+          <button type="button" className="btn-outline" onClick={close}>
             Đóng
           </button>
-          <button className="primary">Lưu</button>
+          <button className="primary">Lưu học phần</button>
         </div>
       </form>
+    </div>
+  );
+}
+
+function AdminStudyPlans({ notify }: { notify: (s: string) => void }) {
+  const [summary, setSummary] = useState<AdminStudyPlanSummaryResponse | null>(
+    null,
+  );
+  const [loading, setLoading] = useState(true);
+  const [statusFilter, setStatusFilter] = useState("ALL");
+  const [q, setQ] = useState("");
+  const [minThreshold, setMinThreshold] = useState(15);
+  const [busy, setBusy] = useState(false);
+
+  const load = async (st = statusFilter) => {
+    setLoading(true);
+    try {
+      const res = await api.getAdminStudyPlanSummary(undefined, st);
+      setSummary(res);
+      setMinThreshold(res.minRequired);
+    } catch (e) {
+      notify((e as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void load(statusFilter);
+  }, [statusFilter]);
+
+  const filtered = useMemo(() => {
+    if (!summary) return [];
+    const kw = q.trim().toLowerCase();
+    if (!kw) return summary.items;
+    return summary.items.filter(
+      (i) =>
+        i.code.toLowerCase().includes(kw) ||
+        i.name.toLowerCase().includes(kw) ||
+        (i.faculty || "").toLowerCase().includes(kw),
+    );
+  }, [summary, q]);
+
+  const handleFinalize = async () => {
+    if (
+      !window.confirm(
+        `Chốt quyết định mở lớp kỳ ${summary?.term || "2026-2"} với ngưỡng tối thiểu ${minThreshold} sinh viên ĐKKHHT?`,
+      )
+    ) {
+      return;
+    }
+    setBusy(true);
+    try {
+      const res = await api.finalizeAdminStudyPlans(
+        minThreshold,
+        summary?.term,
+      );
+      notify(
+        `Đã chốt mở lớp kỳ ${res.term}: ${res.openedCourses} môn mở lớp, ${res.notOpenedCourses} môn không mở lớp, tạo mới ${res.createdOfferings} lớp.`,
+      );
+      await load(statusFilter);
+    } catch (e) {
+      notify((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div>
+      <div className="page-heading">
+        <div>
+          <h1>Nhu cầu ĐKKHHT & Chốt mở lớp</h1>
+          <p className="muted">
+            Thống kê số lượng sinh viên đã đăng ký Kế hoạch học tập từng môn để
+            quyết định mở lớp hoặc hủy mở lớp khi không đủ sĩ số tối thiểu.
+          </p>
+        </div>
+        {summary && <span className="code-badge">Học kỳ {summary.term}</span>}
+      </div>
+
+      {summary && (
+        <div className="metric-strip" style={{ marginBottom: 20 }}>
+          <div className="metric-cell">
+            <span className="metric-label">Tổng lượt ĐKKHHT</span>
+            <strong className="metric-value">{summary.totalPlans}</strong>
+            <small>nguyện vọng học phần</small>
+          </div>
+          <div className="metric-cell">
+            <span className="metric-label">Môn đủ sĩ số mở lớp</span>
+            <strong className="metric-value" style={{ color: "#047857" }}>
+              {summary.openedCourses}
+            </strong>
+            <small>đạt ≥ {summary.minRequired} sinh viên</small>
+          </div>
+          <div className="metric-cell">
+            <span className="metric-label">Môn không mở lớp</span>
+            <strong className="metric-value" style={{ color: "#d71920" }}>
+              {summary.notOpenedCourses}
+            </strong>
+            <small>thiếu sĩ số tối thiểu</small>
+          </div>
+          <div className="metric-cell">
+            <span className="metric-label">Tổng lớp học phần đang mở</span>
+            <strong className="metric-value">{summary.totalOfferings}</strong>
+            <small>kỳ {summary.term}</small>
+          </div>
+        </div>
+      )}
+
+      <section className="panel" style={{ marginBottom: 20 }}>
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: 14,
+            alignItems: "flex-end",
+            justifyContent: "space-between",
+          }}
+        >
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", flex: 1 }}>
+            <label style={{ minWidth: 240, flex: 1, maxWidth: 360 }}>
+              Tìm học phần hoặc khoa
+              <input
+                placeholder="Mã môn, tên môn hoặc khoa…"
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+              />
+            </label>
+            <label style={{ width: 200 }}>
+              Trạng thái mở lớp
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+              >
+                <option value="ALL">Tất cả trạng thái</option>
+                <option value="OPENED">Đủ sĩ số (Đã mở lớp)</option>
+                <option value="NOT_OPENED">Thiếu sĩ số (Không mở lớp)</option>
+                <option value="PENDING">Chờ duyệt</option>
+              </select>
+            </label>
+          </div>
+
+          <div
+            style={{
+              display: "flex",
+              gap: 10,
+              alignItems: "flex-end",
+              flexWrap: "wrap",
+            }}
+          >
+            <label style={{ width: 170 }}>
+              Ngưỡng tối thiểu (SV)
+              <input
+                type="number"
+                min="1"
+                max="200"
+                value={minThreshold}
+                onChange={(e) => setMinThreshold(Number(e.target.value) || 15)}
+              />
+            </label>
+            <button
+              type="button"
+              className="btn-tdtu-red"
+              disabled={busy}
+              style={{ height: 42 }}
+              onClick={() => void handleFinalize()}
+            >
+              {busy ? "Đang chốt…" : "Chốt mở lớp theo ngưỡng"}
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section className="panel">
+        <div className="section-title">
+          <h3>
+            Danh sách học phần theo nhu cầu ĐKKHHT ({filtered.length} môn)
+          </h3>
+        </div>
+        {loading ? (
+          <div className="skeleton">Đang tải thống kê nhu cầu ĐKKHHT…</div>
+        ) : (
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Mã môn</th>
+                  <th>Tên học phần</th>
+                  <th>Khoa / Nhóm</th>
+                  <th>TC</th>
+                  <th>Số SV ĐKKHHT</th>
+                  <th>Trạng thái mở lớp</th>
+                  <th>Lớp mở / Đề xuất</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((item) => {
+                  const pct = Math.min(
+                    100,
+                    Math.round((item.plannedCount / item.minRequired) * 100),
+                  );
+                  return (
+                    <tr key={item.courseId}>
+                      <td>
+                        <b className="mono-id">{item.code}</b>
+                      </td>
+                      <td>{item.name}</td>
+                      <td className="muted">{item.faculty}</td>
+                      <td>{item.credits}</td>
+                      <td>
+                        <div style={{ fontWeight: 700, fontSize: 12.5 }}>
+                          {item.plannedCount} / {item.minRequired} SV
+                        </div>
+                        <div className="capacity" style={{ width: 100 }}>
+                          <i
+                            style={{
+                              width: `${pct}%`,
+                              background:
+                                item.status === "NOT_OPENED"
+                                  ? "#d71920"
+                                  : "#004b91",
+                            }}
+                          />
+                        </div>
+                      </td>
+                      <td>
+                        {item.status === "OPENED" ? (
+                          <span
+                            style={{
+                              fontSize: 11,
+                              fontWeight: 700,
+                              padding: "3px 8px",
+                              background: "#ecfdf5",
+                              color: "#047857",
+                            }}
+                          >
+                            Đã mở lớp
+                          </span>
+                        ) : item.status === "NOT_OPENED" ? (
+                          <span
+                            style={{
+                              fontSize: 11,
+                              fontWeight: 700,
+                              padding: "3px 8px",
+                              background: "#fdecee",
+                              color: "#d71920",
+                            }}
+                          >
+                            Không mở lớp
+                          </span>
+                        ) : (
+                          <span className="pill">Chờ chốt</span>
+                        )}
+                      </td>
+                      <td>
+                        <b>{item.offeringsCount}</b> lớp{" "}
+                        <span className="muted">
+                          (đề xuất {item.recommendedSections})
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
     </div>
   );
 }

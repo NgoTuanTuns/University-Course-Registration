@@ -10,6 +10,7 @@ import pytest
 
 from app.seed_data import (
     ADMIN_EMAIL,
+    STUDY_PLAN_TERM,
     TERM,
     Dataset,
     _requirements,
@@ -232,15 +233,16 @@ def test_all_schedules_inside_grid_hours(default):
         for s in o.schedule:
             assert 1 <= s["day"] <= 7
             assert (
-                _to_min("07:00")
+                _to_min("06:50")
                 <= _to_min(s["start"])
                 < _to_min(s["end"])
                 <= _to_min("21:00")
             )
 
 
-def test_term_is_current(default):
-    assert {o.term for o in default.offerings} == {TERM}
+def test_term_is_current(default, minimal):
+    assert {o.term for o in default.offerings} == {STUDY_PLAN_TERM}
+    assert {o.term for o in minimal.offerings} == {TERM}
 
 
 def test_loadtest_profile_has_five_small_shared_hot_offerings():

@@ -7,6 +7,7 @@ from app.models.course_offering import CourseOffering
 from app.models.enrollment import Enrollment
 from app.models.prerequisite import Prerequisite
 from app.models.student import Student
+from app.models.study_plan import StudyPlan, TermCourseOpening
 from app.models.waitlist import Waitlist
 
 __all__ = [
@@ -17,5 +18,7 @@ __all__ = [
     "Enrollment",
     "Prerequisite",
     "Student",
+    "StudyPlan",
+    "TermCourseOpening",
     "Waitlist",
 ]

@@ -73,14 +73,13 @@ export default function AcademicRecordView({
     <div>
       <div className="page-heading">
         <div>
-          <div className="eyebrow">TIẾN ĐỘ TÍCH LŨY</div>
-          <h1>Hồ sơ học tập & Môn đã hoàn thành</h1>
+          <h1>Hồ sơ học tập</h1>
           <p className="muted">
-            Tổng hợp số tín chỉ tích lũy và danh sách các học phần bạn đã đạt để
-            làm cơ sở kiểm tra điều kiện tiên quyết.
+            Tổng hợp số tín chỉ tích lũy, điểm trung bình và danh sách học phần
+            đã hoàn thành làm cơ sở xét điều kiện tiên quyết.
           </p>
         </div>
-        {record?.mssv && <span className="pill">MSSV: {record.mssv}</span>}
+        {record?.mssv && <span className="code-badge">{record.mssv}</span>}
       </div>
 
       {loading ? (
@@ -89,32 +88,33 @@ export default function AcademicRecordView({
         <div className="panel empty">Không thể tải dữ liệu hồ sơ học tập.</div>
       ) : (
         <>
-          <div className="stats" style={{ marginBottom: 20 }}>
-            <article>
-              <span>Tín chỉ tích lũy</span>
-              <strong>{record.accumulatedCredits}</strong>
+          <div className="metric-strip" style={{ marginBottom: 20 }}>
+            <div className="metric-cell">
+              <span className="metric-label">Tín chỉ tích lũy</span>
+              <strong className="metric-value">
+                {record.accumulatedCredits}
+              </strong>
               <small>tín chỉ đã hoàn thành</small>
-            </article>
-            <article>
-              <span>Điểm trung bình (GPA)</span>
-              <strong>{record.gpa.toFixed(2)}</strong>
+            </div>
+            <div className="metric-cell">
+              <span className="metric-label">Điểm trung bình (GPA)</span>
+              <strong className="metric-value">{record.gpa.toFixed(2)}</strong>
               <small>thang điểm 10</small>
-            </article>
-            <article>
-              <span>Số môn đã đạt</span>
-              <strong>{record.completedCount}</strong>
+            </div>
+            <div className="metric-cell">
+              <span className="metric-label">Số môn đã đạt</span>
+              <strong className="metric-value">{record.completedCount}</strong>
               <small>học phần tích lũy</small>
-            </article>
-            <article>
-              <span>Khoa / Ngành</span>
-              <strong style={{ fontSize: 16 }}>
+            </div>
+            <div className="metric-cell">
+              <span className="metric-label">Khoa và ngành đào tạo</span>
+              <strong className="metric-value" style={{ fontSize: 16 }}>
                 {record.faculty || "Chưa cập nhật"}
               </strong>
               <small>
-                {record.program || "Đại học"} · Hạn mức kỳ: {record.maxCredits}{" "}
-                TC
+                {record.program || "Đại học"}, hạn mức kỳ {record.maxCredits} TC
               </small>
-            </article>
+            </div>
           </div>
 
           <section className="panel">
@@ -122,6 +122,7 @@ export default function AcademicRecordView({
               <h3>Danh sách môn học đã hoàn thành ({filtered.length})</h3>
               <div className="actions">
                 <input
+                  aria-label="Tìm mã hoặc tên môn đã hoàn thành"
                   placeholder="Tìm mã hoặc tên môn…"
                   value={q}
                   onChange={(e) => setQ(e.target.value)}

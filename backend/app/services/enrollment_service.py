@@ -20,6 +20,7 @@ from app.models import (
     CourseOffering,
     Enrollment,
     Student,
+    TermCourseOpening,
     Waitlist,
 )
 from app.services.enrollment_lock import acquire_offering_lock
@@ -64,6 +65,13 @@ async def ensure_eligible(
     completed = await session.get(CompletedCourse, (student.id, offering.course_id))
     if completed:
         raise api_error(409, "ALREADY_COMPLETED", "Môn học đã đạt")
+    opening = await session.get(TermCourseOpening, (offering.term, offering.course_id))
+    if opening is not None and getattr(opening, "status", None) == "NOT_OPENED":
+        raise api_error(
+            422,
+            "COURSE_NOT_OPENED",
+            "Học phần này không mở lớp trong học kỳ do không đủ số lượng sinh viên đăng ký kế hoạch học tập",
+        )
     course_row = (
         await session.execute(
             select(Course.credits, Course.min_accumulated_credits).where(

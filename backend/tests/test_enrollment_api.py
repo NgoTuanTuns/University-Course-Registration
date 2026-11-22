@@ -233,8 +233,8 @@ async def test_search_literal_wildcards_and_query_count(
             )
             assert [i["id"] for i in response.json()["items"]] == [offering.id]
         assert (
-            len(statements) == 14
-        )  # 2 * (latest term + student + count + courses + completed + prereqs + joined page), independent of rows
+            len(statements) == 16
+        )  # 2 * (latest term + student + count + courses + completed + study_plan + prereqs + joined page), independent of rows
     finally:
         event.remove(test_engine.sync_engine, "before_cursor_execute", record)
     assert other.id != offering.id

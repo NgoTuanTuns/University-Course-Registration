@@ -25,9 +25,7 @@ interface TimetableResponse {
 
 export async function timetable(): Promise<Enrollment[]> {
   try {
-    const data = await http<TimetableResponse | Enrollment[]>(
-      "/timetable?term=2026-1",
-    );
+    const data = await http<TimetableResponse | Enrollment[]>("/timetable");
     if (Array.isArray(data)) {
       return data;
     }

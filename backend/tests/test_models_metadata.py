@@ -19,6 +19,8 @@ TABLES = {
     "completed_courses",
     "enrollments",
     "waitlist",
+    "study_plans",
+    "term_course_openings",
 }
 
 

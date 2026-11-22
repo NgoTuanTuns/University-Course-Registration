@@ -5,3 +5,4 @@ export * from "./prerequisites";
 export * from "./enroll";
 export * from "./waitlist";
 export * from "./admin";
+export * from "./studyPlans";

@@ -82,6 +82,189 @@
         "title": "AcademicRecordResponse",
         "type": "object"
       },
+      "AdminFinalizeStudyPlansRequest": {
+        "properties": {
+          "min_students_to_open": {
+            "default": 15,
+            "maximum": 200.0,
+            "minimum": 1.0,
+            "title": "Min Students To Open",
+            "type": "integer"
+          },
+          "term": {
+            "anyOf": [
+              {
+                "pattern": "^\\d{4}-[1-3]$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Term"
+          }
+        },
+        "title": "AdminFinalizeStudyPlansRequest",
+        "type": "object"
+      },
+      "AdminFinalizeStudyPlansResponse": {
+        "properties": {
+          "created_offerings": {
+            "title": "Created Offerings",
+            "type": "integer"
+          },
+          "min_students_to_open": {
+            "title": "Min Students To Open",
+            "type": "integer"
+          },
+          "not_opened_courses": {
+            "title": "Not Opened Courses",
+            "type": "integer"
+          },
+          "opened_courses": {
+            "title": "Opened Courses",
+            "type": "integer"
+          },
+          "term": {
+            "title": "Term",
+            "type": "string"
+          }
+        },
+        "required": [
+          "term",
+          "min_students_to_open",
+          "opened_courses",
+          "not_opened_courses",
+          "created_offerings"
+        ],
+        "title": "AdminFinalizeStudyPlansResponse",
+        "type": "object"
+      },
+      "AdminStudyPlanCourseSummary": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "course_id": {
+            "title": "Course Id",
+            "type": "integer"
+          },
+          "credits": {
+            "title": "Credits",
+            "type": "integer"
+          },
+          "faculty": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Faculty"
+          },
+          "min_required": {
+            "title": "Min Required",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "offerings_count": {
+            "title": "Offerings Count",
+            "type": "integer"
+          },
+          "planned_count": {
+            "title": "Planned Count",
+            "type": "integer"
+          },
+          "recommended_sections": {
+            "title": "Recommended Sections",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "PENDING",
+              "OPENED",
+              "NOT_OPENED"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "course_id",
+          "code",
+          "name",
+          "credits",
+          "planned_count",
+          "min_required",
+          "status",
+          "offerings_count",
+          "recommended_sections"
+        ],
+        "title": "AdminStudyPlanCourseSummary",
+        "type": "object"
+      },
+      "AdminStudyPlanSummaryResponse": {
+        "properties": {
+          "is_editable": {
+            "title": "Is Editable",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AdminStudyPlanCourseSummary"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "min_required": {
+            "title": "Min Required",
+            "type": "integer"
+          },
+          "not_opened_courses": {
+            "title": "Not Opened Courses",
+            "type": "integer"
+          },
+          "opened_courses": {
+            "title": "Opened Courses",
+            "type": "integer"
+          },
+          "pending_courses": {
+            "title": "Pending Courses",
+            "type": "integer"
+          },
+          "term": {
+            "title": "Term",
+            "type": "string"
+          },
+          "total_offerings": {
+            "title": "Total Offerings",
+            "type": "integer"
+          },
+          "total_plans": {
+            "title": "Total Plans",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "term",
+          "is_editable",
+          "min_required",
+          "total_plans",
+          "opened_courses",
+          "not_opened_courses",
+          "pending_courses",
+          "total_offerings",
+          "items"
+        ],
+        "title": "AdminStudyPlanSummaryResponse",
+        "type": "object"
+      },
       "CompletedCourseOut": {
         "properties": {
           "code": {
@@ -603,6 +786,11 @@
           "id": {
             "title": "Id",
             "type": "integer"
+          },
+          "in_study_plan": {
+            "default": false,
+            "title": "In Study Plan",
+            "type": "boolean"
           },
           "instructor": {
             "anyOf": [
@@ -1246,6 +1434,161 @@
         "title": "RefreshRequest",
         "type": "object"
       },
+      "StudyPlanCreateRequest": {
+        "properties": {
+          "course_id": {
+            "exclusiveMinimum": 0.0,
+            "title": "Course Id",
+            "type": "integer"
+          },
+          "term": {
+            "anyOf": [
+              {
+                "pattern": "^\\d{4}-[1-3]$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Term"
+          }
+        },
+        "required": [
+          "course_id"
+        ],
+        "title": "StudyPlanCreateRequest",
+        "type": "object"
+      },
+      "StudyPlanItemOut": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "course_id": {
+            "title": "Course Id",
+            "type": "integer"
+          },
+          "credits": {
+            "title": "Credits",
+            "type": "integer"
+          },
+          "enrollment_status": {
+            "enum": [
+              "ENROLLED",
+              "WAITLISTED",
+              "NOT_ENROLLED"
+            ],
+            "title": "Enrollment Status",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "min_accumulated_credits": {
+            "default": 0,
+            "title": "Min Accumulated Credits",
+            "type": "integer"
+          },
+          "min_required": {
+            "title": "Min Required",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "offerings_count": {
+            "title": "Offerings Count",
+            "type": "integer"
+          },
+          "opening_status": {
+            "enum": [
+              "PENDING",
+              "OPENED",
+              "NOT_OPENED"
+            ],
+            "title": "Opening Status",
+            "type": "string"
+          },
+          "planned_count": {
+            "title": "Planned Count",
+            "type": "integer"
+          },
+          "term": {
+            "title": "Term",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "course_id",
+          "code",
+          "name",
+          "credits",
+          "term",
+          "planned_count",
+          "min_required",
+          "opening_status",
+          "offerings_count",
+          "enrollment_status"
+        ],
+        "title": "StudyPlanItemOut",
+        "type": "object"
+      },
+      "StudyPlanResponse": {
+        "properties": {
+          "is_editable": {
+            "title": "Is Editable",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/StudyPlanItemOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "max_credits": {
+            "title": "Max Credits",
+            "type": "integer"
+          },
+          "not_opened_count": {
+            "title": "Not Opened Count",
+            "type": "integer"
+          },
+          "opened_count": {
+            "title": "Opened Count",
+            "type": "integer"
+          },
+          "phase_message": {
+            "title": "Phase Message",
+            "type": "string"
+          },
+          "term": {
+            "title": "Term",
+            "type": "string"
+          },
+          "total_planned_credits": {
+            "title": "Total Planned Credits",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "term",
+          "is_editable",
+          "phase_message",
+          "total_planned_credits",
+          "max_credits",
+          "opened_count",
+          "not_opened_count",
+          "items"
+        ],
+        "title": "StudyPlanResponse",
+        "type": "object"
+      },
       "Timetable": {
         "properties": {
           "items": {
@@ -1330,6 +1673,11 @@
           "id": {
             "title": "Id",
             "type": "integer"
+          },
+          "in_study_plan": {
+            "default": false,
+            "title": "In Study Plan",
+            "type": "boolean"
           },
           "instructor": {
             "anyOf": [
@@ -1613,6 +1961,11 @@
           "id": {
             "title": "Id",
             "type": "integer"
+          },
+          "in_study_plan": {
+            "default": false,
+            "title": "In Study Plan",
+            "type": "boolean"
           },
           "instructor": {
             "anyOf": [
@@ -2410,6 +2763,148 @@
         ]
       }
     },
+    "/api/v1/admin/study-plans/finalize": {
+      "post": {
+        "operationId": "admin_finalize_study_plans_api_v1_admin_study_plans_finalize_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminFinalizeStudyPlansRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminFinalizeStudyPlansResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Admin Finalize Study Plans",
+        "tags": [
+          "study-plans"
+        ]
+      }
+    },
+    "/api/v1/admin/study-plans/summary": {
+      "get": {
+        "operationId": "admin_study_plan_summary_api_v1_admin_study_plans_summary_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "term",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^\\d{4}-[1-3]$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Term"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^(ALL|PENDING|OPENED|NOT_OPENED)$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminStudyPlanSummaryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Admin Study Plan Summary",
+        "tags": [
+          "study-plans"
+        ]
+      }
+    },
     "/api/v1/auth/login": {
       "post": {
         "operationId": "login_api_v1_auth_login_post",
@@ -3164,6 +3659,187 @@
         "summary": "Get My Academic Record",
         "tags": [
           "students"
+        ]
+      }
+    },
+    "/api/v1/study-plans": {
+      "get": {
+        "operationId": "get_my_study_plan_api_v1_study_plans_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "term",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^\\d{4}-[1-3]$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Term"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudyPlanResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get My Study Plan",
+        "tags": [
+          "study-plans"
+        ]
+      },
+      "post": {
+        "operationId": "add_to_my_study_plan_api_v1_study_plans_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StudyPlanCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudyPlanResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Add To My Study Plan",
+        "tags": [
+          "study-plans"
+        ]
+      }
+    },
+    "/api/v1/study-plans/{plan_id}": {
+      "delete": {
+        "operationId": "remove_from_my_study_plan_api_v1_study_plans__plan_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plan_id",
+            "required": true,
+            "schema": {
+              "title": "Plan Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudyPlanResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remove From My Study Plan",
+        "tags": [
+          "study-plans"
         ]
       }
     },

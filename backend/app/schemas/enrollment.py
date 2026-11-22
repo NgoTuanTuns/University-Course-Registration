@@ -36,6 +36,7 @@ class OfferingItem(BaseModel):
     eligibility_status: (
         Literal["RECOMMENDED", "ELIGIBLE", "LOCKED", "COMPLETED"] | None
     ) = None
+    in_study_plan: bool = False
 
 
 class CoursePage(BaseModel):

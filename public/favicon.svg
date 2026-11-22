@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 36 36" fill="none">
+  <defs>
+    <linearGradient id="uf-red" x1="17" y1="29" x2="29" y2="12" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#d71920"/>
+      <stop offset="100%" stop-color="#ff4d54"/>
+    </linearGradient>
+    <linearGradient id="uf-blue" x1="15.5" y1="19.5" x2="29" y2="8" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="100%" stop-color="#e0f2fe"/>
+    </linearGradient>
+  </defs>
+  <rect x="0.5" y="0.5" width="35" height="35" fill="#002347" stroke="#1e4976" stroke-width="1"/>
+  <path d="M7 8H12.4V22.4C12.4 23.7 13.3 24.5 14.6 24.5H17.4L14.9 29H12.8C9.2 29 7 26.6 7 22.8V8Z" fill="#FFFFFF"/>
+  <path d="M17.2 29L19.7 24.5H21.4C22.7 24.5 23.6 23.7 23.6 22.4V16.4L29 12.2V22.8C29 26.6 26.8 29 23.2 29H17.2Z" fill="url(#uf-red)"/>
+  <path d="M15.6 13.2L20.8 8H29L23.8 13.2H15.6Z" fill="url(#uf-blue)"/>
+  <path d="M15.6 19.6L18.8 16.4H21.8V19.6H15.6Z" fill="#7DD3FC"/>
+</svg>

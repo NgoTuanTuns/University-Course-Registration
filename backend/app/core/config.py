@@ -26,6 +26,10 @@ class Settings(BaseSettings):
     refresh_token_ttl_days: int = 7
 
     default_max_credits: int = 25
+    study_plan_term: str = "2026-2"
+    study_plan_editable: bool = False
+    min_plan_students_to_open: int = Field(default=15, ge=1, le=200)
+    default_section_capacity: int = Field(default=40, ge=5, le=200)
     waitlist_max_ratio: float = Field(default=0.2, gt=0)
     min_break_minutes: int = Field(default=0, ge=0)
     enrollment_redis_lock_enabled: bool = False

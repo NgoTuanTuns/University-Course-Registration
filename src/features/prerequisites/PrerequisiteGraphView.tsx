@@ -239,9 +239,9 @@ function computeAirflowLayout(
     positionedEdges.push({
       key: `${edge.prereqCourseId}-${edge.courseId}-${edge.groupNo}`,
       edge,
-      x1: from.x + NODE_W,
+      x1: from.x + NODE_W + 4,
       y1: from.y + NODE_H / 2,
-      x2: to.x,
+      x2: to.x - 5,
       y2: to.y + NODE_H / 2,
     });
   }
@@ -311,15 +311,25 @@ export default function PrerequisiteGraphView({
     };
   }, []);
 
-  // Close pop-up on Escape key
+  // Close node detail pop-up first, then fullscreen DAG pop-up on Escape
   useEffect(() => {
-    if (!isPopupOpen) return;
+    if (!isPopupOpen && selectedId === null) return;
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setIsPopupOpen(false);
+      if (e.key !== "Escape") return;
+      if (selectedId !== null) setSelectedId(null);
+      else if (isPopupOpen) setIsPopupOpen(false);
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [isPopupOpen]);
+  }, [isPopupOpen, selectedId]);
+
+  const nodeByCode = useMemo(() => {
+    const map = new Map<string, PrereqGraphNode>();
+    if (graph) {
+      for (const n of graph.nodes) map.set(n.code, n);
+    }
+    return map;
+  }, [graph]);
 
   const availablePrefixes = useMemo(() => {
     if (!graph) return [];
@@ -452,8 +462,6 @@ export default function PrerequisiteGraphView({
         origX: pan.x,
         origY: pan.y,
       };
-      setIsPanning(true);
-      e.currentTarget.setPointerCapture(e.pointerId);
     },
     [pan.x, pan.y],
   );
@@ -463,8 +471,11 @@ export default function PrerequisiteGraphView({
       if (!dragRef.current.active) return;
       const dx = e.clientX - dragRef.current.startX;
       const dy = e.clientY - dragRef.current.startY;
-      if (Math.abs(dx) > 4 || Math.abs(dy) > 4) {
+      if (!dragRef.current.moved) {
+        if (Math.abs(dx) <= 5 && Math.abs(dy) <= 5) return;
         dragRef.current.moved = true;
+        setIsPanning(true);
+        e.currentTarget.setPointerCapture(e.pointerId);
       }
       setPan({
         x: dragRef.current.origX + dx,
@@ -535,14 +546,15 @@ export default function PrerequisiteGraphView({
         onChange={(e) => setStatusFilter(e.target.value)}
       >
         <option value="ALL">Mọi trạng thái</option>
-        <option value="COMPLETED">🟢 Đã hoàn thành ({counts.completed})</option>
+        <option value="COMPLETED">Đã hoàn thành ({counts.completed})</option>
         <option value="ELIGIBLE">
-          🟡 Đủ điều kiện học ngay ({counts.eligible})
+          Đủ điều kiện học ngay ({counts.eligible})
         </option>
-        <option value="LOCKED">🔒 Chưa đủ ĐK ({counts.locked})</option>
+        <option value="LOCKED">Chưa đủ điều kiện ({counts.locked})</option>
       </select>
 
       <input
+        aria-label="Tìm mã hoặc tên học phần trên đồ thị"
         placeholder="Tìm mã hoặc tên môn…"
         value={search}
         onChange={(e) => setSearch(e.target.value)}
@@ -594,8 +606,10 @@ export default function PrerequisiteGraphView({
     }
 
     const buildPath = (pe: PositionedEdge) => {
-      const dx = Math.max(36, Math.min(96, (pe.x2 - pe.x1) * 0.45));
-      return `M ${pe.x1} ${pe.y1} C ${pe.x1 + dx} ${pe.y1}, ${pe.x2 - dx} ${pe.y2}, ${pe.x2} ${pe.y2}`;
+      const lead = 8;
+      const endCurveX = Math.max(pe.x1 + 10, pe.x2 - lead);
+      const dx = Math.max(28, Math.min(88, (endCurveX - pe.x1) * 0.48));
+      return `M ${pe.x1} ${pe.y1} C ${pe.x1 + dx} ${pe.y1}, ${endCurveX - dx} ${pe.y2}, ${endCurveX} ${pe.y2} L ${pe.x2} ${pe.y2}`;
     };
 
     const markerPrefix = fullscreen ? "pop" : "emb";
@@ -844,43 +858,51 @@ export default function PrerequisiteGraphView({
             <defs>
               <marker
                 id={`${markerPrefix}-and`}
-                markerWidth="7"
-                markerHeight="7"
-                refX="6.5"
-                refY="3.5"
+                viewBox="0 0 10 10"
+                markerUnits="userSpaceOnUse"
+                markerWidth="8"
+                markerHeight="8"
+                refX="8"
+                refY="5"
                 orient="auto"
               >
-                <path d="M0,0.8 L6.5,3.5 L0,6.2 Z" fill="#94a3b8" />
+                <path d="M 0 1.5 L 8.5 5 L 0 8.5 Z" fill="#94a3b8" />
               </marker>
               <marker
                 id={`${markerPrefix}-or`}
-                markerWidth="7"
-                markerHeight="7"
-                refX="6.5"
-                refY="3.5"
+                viewBox="0 0 10 10"
+                markerUnits="userSpaceOnUse"
+                markerWidth="8"
+                markerHeight="8"
+                refX="8"
+                refY="5"
                 orient="auto"
               >
-                <path d="M0,0.8 L6.5,3.5 L0,6.2 Z" fill="#f59e0b" />
+                <path d="M 0 1.5 L 8.5 5 L 0 8.5 Z" fill="#f59e0b" />
               </marker>
               <marker
                 id={`${markerPrefix}-up`}
-                markerWidth="8"
-                markerHeight="8"
-                refX="7"
-                refY="4"
+                viewBox="0 0 10 10"
+                markerUnits="userSpaceOnUse"
+                markerWidth="9"
+                markerHeight="9"
+                refX="8.5"
+                refY="5"
                 orient="auto"
               >
-                <path d="M0,1 L7,4 L0,7 Z" fill="#00529c" />
+                <path d="M 0 1.2 L 9 5 L 0 8.8 Z" fill="#00529c" />
               </marker>
               <marker
                 id={`${markerPrefix}-down`}
-                markerWidth="8"
-                markerHeight="8"
-                refX="7"
-                refY="4"
+                viewBox="0 0 10 10"
+                markerUnits="userSpaceOnUse"
+                markerWidth="9"
+                markerHeight="9"
+                refX="8.5"
+                refY="5"
                 orient="auto"
               >
-                <path d="M0,1 L7,4 L0,7 Z" fill="#d71920" />
+                <path d="M 0 1.2 L 9 5 L 0 8.8 Z" fill="#d71920" />
               </marker>
             </defs>
 
@@ -1109,75 +1131,377 @@ export default function PrerequisiteGraphView({
     );
   };
 
-  const renderSelectedDetail = (compact = false) => {
+  const renderNodeDetailPopup = () => {
     if (!selectedNode) return null;
+    const st = STATUS_STYLE[selectedNode.status];
+    const studentTc = graph?.studentAccumulatedCredits ?? 0;
+    const tcMet = selectedNode.missingCredits === 0;
+
     return (
-      <section
-        className="panel"
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="node-popup-title"
+        onClick={(e) => {
+          if (e.target === e.currentTarget) setSelectedId(null);
+        }}
         style={{
-          marginTop: compact ? 0 : 16,
-          padding: compact ? "12px 16px" : undefined,
-          background: "#ffffff",
+          position: "fixed",
+          inset: 0,
+          zIndex: 1100,
+          background: "rgba(15, 23, 42, 0.56)",
+          backdropFilter: "blur(3px)",
+          display: "grid",
+          placeItems: "center",
+          padding: 16,
         }}
       >
-        <div className="section-title" style={{ marginBottom: 8 }}>
-          <h3 style={{ fontSize: compact ? 15 : undefined }}>
-            Chi tiết ràng buộc: {selectedNode.code} — {selectedNode.name}
-          </h3>
-          <button
-            type="button"
-            className="text-button"
-            onClick={() => setSelectedId(null)}
-          >
-            Bỏ chọn
-          </button>
-        </div>
         <div
           style={{
-            display: "grid",
-            gridTemplateColumns: compact
-              ? "repeat(auto-fit, minmax(240px, 1fr))"
-              : "1fr",
-            gap: 8,
-            fontSize: 13.5,
+            width: "min(600px, 100%)",
+            maxHeight: "88vh",
+            overflowY: "auto",
+            background: "var(--panel)",
+            color: "var(--text)",
+            border: "1px solid var(--border)",
+            borderTop: `4px solid ${st.accent}`,
+            borderRadius: 0,
+            boxShadow: "0 24px 60px rgba(15, 23, 42, 0.32)",
           }}
         >
-          <div>
-            <b>Tín chỉ môn học:</b> {selectedNode.credits} TC ·{" "}
-            <b>Tín chỉ tích lũy tối thiểu:</b>{" "}
-            {selectedNode.minAccumulatedCredits === 0
-              ? "0 TC (Năm 1 đăng ký ngay)"
-              : `${selectedNode.minAccumulatedCredits} TC`}
-            {selectedNode.missingCredits > 0 && (
-              <span style={{ color: "#dc2626", marginLeft: 6 }}>
-                (Thiếu {selectedNode.missingCredits} TC)
-              </span>
-            )}
-          </div>
-          <div>
-            <b>Tiên quyết bắt buộc (AND):</b>{" "}
-            {selectedNode.andPrereqs.length
-              ? selectedNode.andPrereqs.join(", ")
-              : "Không có"}
-          </div>
-          {selectedNode.orGroups.length > 0 && (
+          {/* Header */}
+          <div
+            style={{
+              padding: "16px 20px",
+              borderBottom: "1px solid var(--border)",
+              display: "flex",
+              alignItems: "flex-start",
+              justifyContent: "space-between",
+              gap: 12,
+            }}
+          >
             <div>
-              <b>Nhóm thay thế (OR):</b>{" "}
-              {selectedNode.orGroups
-                .map((g) => `Nhóm ${g.groupNo}: (${g.options.join(" hoặc ")})`)
-                .join(" ; ")}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  flexWrap: "wrap",
+                  marginBottom: 6,
+                }}
+              >
+                <span className="code-badge">{selectedNode.code}</span>
+                <span
+                  style={{
+                    fontSize: 11.5,
+                    fontWeight: 700,
+                    padding: "3px 8px",
+                    background: st.badgeBg,
+                    color: st.badgeText,
+                  }}
+                >
+                  {st.label}
+                </span>
+                <span className="muted" style={{ fontSize: 12 }}>
+                  Tầng {selectedNode.level}
+                </span>
+              </div>
+              <h2
+                id="node-popup-title"
+                style={{ margin: 0, fontSize: 20, lineHeight: 1.3 }}
+              >
+                {selectedNode.name}
+              </h2>
             </div>
-          )}
-          <div>
-            <b>Mở khóa tiếp theo:</b>{" "}
-            {unlockedBySelected.length
-              ? unlockedBySelected
-                  .map((n) => `${n.code} (${n.name})`)
-                  .join(", ")
-              : "Môn cuối nhánh"}
+            <button
+              type="button"
+              aria-label="Đóng thông tin môn học"
+              onClick={() => setSelectedId(null)}
+              className="btn-outline"
+              style={{ padding: "6px 8px" }}
+            >
+              <X size={17} />
+            </button>
+          </div>
+
+          {/* Credit Metrics Strip */}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+              borderBottom: "1px solid var(--border)",
+              background: "var(--soft)",
+            }}
+          >
+            <div
+              style={{
+                padding: "12px 16px",
+                borderRight: "1px solid var(--border)",
+              }}
+            >
+              <div className="muted" style={{ fontSize: 11.5 }}>
+                Số tín chỉ môn học
+              </div>
+              <strong style={{ fontSize: 18 }}>
+                {selectedNode.credits} TC
+              </strong>
+            </div>
+            <div
+              style={{
+                padding: "12px 16px",
+                borderRight: "1px solid var(--border)",
+              }}
+            >
+              <div className="muted" style={{ fontSize: 11.5 }}>
+                Tín chỉ tích lũy tối thiểu
+              </div>
+              <strong style={{ fontSize: 18 }}>
+                {selectedNode.minAccumulatedCredits === 0
+                  ? "0 TC"
+                  : `≥ ${selectedNode.minAccumulatedCredits} TC`}
+              </strong>
+            </div>
+            <div style={{ padding: "12px 16px" }}>
+              <div className="muted" style={{ fontSize: 11.5 }}>
+                Tín chỉ hiện tại của bạn
+              </div>
+              <strong
+                style={{
+                  fontSize: 18,
+                  color: tcMet ? "#047857" : "#d71920",
+                }}
+              >
+                {studentTc} TC
+              </strong>
+              <div
+                style={{
+                  fontSize: 11,
+                  fontWeight: 600,
+                  color: tcMet ? "#047857" : "#d71920",
+                }}
+              >
+                {tcMet
+                  ? selectedNode.minAccumulatedCredits === 0
+                    ? "Mở cho năm nhất"
+                    : "Đạt yêu cầu tín chỉ"
+                  : `Còn thiếu ${selectedNode.missingCredits} TC`}
+              </div>
+            </div>
+          </div>
+
+          {/* Prerequisites & Unlocks Body */}
+          <div style={{ padding: "18px 20px", display: "grid", gap: 16 }}>
+            {/* Mandatory AND Prerequisites */}
+            <div>
+              <div
+                style={{
+                  fontWeight: 700,
+                  fontSize: 13.5,
+                  marginBottom: 8,
+                  color: "var(--text)",
+                }}
+              >
+                Môn bắt buộc học trước (Tiên quyết AND)
+              </div>
+              {selectedNode.andPrereqs.length === 0 ? (
+                <p className="muted" style={{ margin: 0 }}>
+                  Không yêu cầu môn tiên quyết bắt buộc.
+                </p>
+              ) : (
+                <div style={{ display: "grid", gap: 6 }}>
+                  {selectedNode.andPrereqs.map((code) => {
+                    const target = nodeByCode.get(code);
+                    const done = target?.status === "COMPLETED";
+                    return (
+                      <button
+                        key={code}
+                        type="button"
+                        onClick={() => target && setSelectedId(target.id)}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          gap: 10,
+                          width: "100%",
+                          padding: "9px 12px",
+                          background: "var(--panel)",
+                          color: "var(--text)",
+                          border: "1px solid var(--border)",
+                          borderLeft: `3px solid ${done ? "#10b981" : "#d71920"}`,
+                          textAlign: "left",
+                          cursor: target ? "pointer" : "default",
+                        }}
+                      >
+                        <div style={{ minWidth: 0 }}>
+                          <b className="mono-id" style={{ marginRight: 8 }}>
+                            {code}
+                          </b>
+                          <span style={{ fontSize: 13 }}>
+                            {target?.name || code}
+                          </span>
+                        </div>
+                        <span
+                          style={{
+                            fontSize: 11,
+                            fontWeight: 700,
+                            padding: "2px 8px",
+                            whiteSpace: "nowrap",
+                            background: done ? "#ecfdf5" : "#fdecee",
+                            color: done ? "#047857" : "#d71920",
+                          }}
+                        >
+                          {done ? "Đã hoàn thành" : "Chưa đạt"}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* OR Prerequisite Groups */}
+            {selectedNode.orGroups.length > 0 && (
+              <div>
+                <div
+                  style={{
+                    fontWeight: 700,
+                    fontSize: 13.5,
+                    marginBottom: 8,
+                    color: "var(--text)",
+                  }}
+                >
+                  Môn tiên quyết thay thế (OR — đạt ít nhất 1 môn mỗi nhóm)
+                </div>
+                <div style={{ display: "grid", gap: 10 }}>
+                  {selectedNode.orGroups.map((group) => (
+                    <div
+                      key={group.groupNo}
+                      style={{
+                        border: "1px solid var(--border)",
+                        padding: "10px 12px",
+                        background: "var(--soft)",
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontSize: 12,
+                          fontWeight: 700,
+                          color: "#b45309",
+                          marginBottom: 6,
+                        }}
+                      >
+                        Nhóm lựa chọn {group.groupNo}
+                      </div>
+                      <div style={{ display: "grid", gap: 6 }}>
+                        {group.options.map((code) => {
+                          const target = nodeByCode.get(code);
+                          const done = target?.status === "COMPLETED";
+                          return (
+                            <button
+                              key={code}
+                              type="button"
+                              onClick={() => target && setSelectedId(target.id)}
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "space-between",
+                                gap: 8,
+                                width: "100%",
+                                padding: "7px 10px",
+                                background: "var(--panel)",
+                                color: "var(--text)",
+                                border: "1px solid var(--border)",
+                                textAlign: "left",
+                                cursor: target ? "pointer" : "default",
+                              }}
+                            >
+                              <div>
+                                <b
+                                  className="mono-id"
+                                  style={{ marginRight: 8 }}
+                                >
+                                  {code}
+                                </b>
+                                <span style={{ fontSize: 12.5 }}>
+                                  {target?.name || code}
+                                </span>
+                              </div>
+                              <span
+                                style={{
+                                  fontSize: 11,
+                                  fontWeight: 700,
+                                  color: done ? "#047857" : "#64748b",
+                                }}
+                              >
+                                {done ? "Đã hoàn thành" : "Chưa đạt"}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Downstream Unlocked Courses */}
+            <div>
+              <div
+                style={{
+                  fontWeight: 700,
+                  fontSize: 13.5,
+                  marginBottom: 8,
+                  color: "var(--text)",
+                }}
+              >
+                Môn mở khóa sau khi hoàn thành học phần này
+              </div>
+              {unlockedBySelected.length === 0 ? (
+                <p className="muted" style={{ margin: 0 }}>
+                  Môn cuối nhánh (không có môn phụ thuộc phía sau).
+                </p>
+              ) : (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  {unlockedBySelected.map((n) => (
+                    <button
+                      key={n.id}
+                      type="button"
+                      className="btn-outline"
+                      onClick={() => setSelectedId(n.id)}
+                      style={{
+                        padding: "6px 10px",
+                        fontSize: 12,
+                        fontWeight: 600,
+                      }}
+                    >
+                      <span className="mono-id">{n.code}</span> — {n.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div
+            style={{
+              padding: "12px 20px",
+              borderTop: "1px solid var(--border)",
+              display: "flex",
+              justifyContent: "flex-end",
+            }}
+          >
+            <button
+              type="button"
+              className="primary"
+              onClick={() => setSelectedId(null)}
+            >
+              Đóng
+            </button>
           </div>
         </div>
-      </section>
+      </div>
     );
   };
 
@@ -1185,17 +1509,15 @@ export default function PrerequisiteGraphView({
     <div>
       <div className="page-heading">
         <div>
-          <div className="eyebrow">ĐỒ THỊ TIÊN QUYẾT (DAG)</div>
-          <h1>Sơ đồ ràng buộc học phần</h1>
+          <h1>Sơ đồ tiên quyết học phần</h1>
           <p className="muted">
-            Kéo thả để di chuyển đồ thị, di chuột hoặc nhấp vào môn học để làm
-            nổi bật chuỗi tiên quyết và các môn mở khóa. Bấm nút mũi tên ở góc
-            phải để mở cửa sổ toàn màn hình.
+            Kéo thả để di chuyển đồ thị, di chuột hoặc nhấp vào từng môn để xem
+            chuỗi môn bắt buộc và các môn mở khóa tiếp theo.
           </p>
         </div>
         {graph && (
           <span className="pill">
-            Tín chỉ tích lũy: {graph.studentAccumulatedCredits} TC
+            Tích lũy {graph.studentAccumulatedCredits} tín chỉ
           </span>
         )}
       </div>
@@ -1213,8 +1535,6 @@ export default function PrerequisiteGraphView({
           {renderDagCanvas(false)}
         </section>
       )}
-
-      {renderSelectedDetail(false)}
 
       {/* Full-screen Interactive Pop-up Modal */}
       {isPopupOpen && (
@@ -1309,21 +1629,12 @@ export default function PrerequisiteGraphView({
                 <div className="empty">Không tìm thấy học phần phù hợp.</div>
               )}
             </div>
-
-            {/* Optional Compact Detail Bar inside Modal */}
-            {selectedNode && (
-              <div
-                style={{
-                  padding: "0 12px 12px",
-                  borderTop: "1px solid #f1f5f9",
-                }}
-              >
-                {renderSelectedDetail(true)}
-              </div>
-            )}
           </div>
         </div>
       )}
+
+      {/* Course Detail Pop-up Modal (works over both embedded & fullscreen DAG) */}
+      {renderNodeDetailPopup()}
     </div>
   );
 }

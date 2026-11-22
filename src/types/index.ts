@@ -19,6 +19,7 @@ export interface Offering {
   capacity: number;
   eligibilityStatus?:
     "RECOMMENDED" | "ELIGIBLE" | "LOCKED" | "COMPLETED" | null;
+  inStudyPlan?: boolean;
 }
 
 export interface User {
@@ -142,4 +143,63 @@ export interface AcademicRecordResponse {
   gpa: number;
   completedCount: number;
   completedCourses: CompletedCourseItem[];
+}
+
+export interface StudyPlanItem {
+  id: number;
+  courseId: number;
+  code: string;
+  name: string;
+  credits: number;
+  minAccumulatedCredits: number;
+  term: string;
+  plannedCount: number;
+  minRequired: number;
+  openingStatus: "PENDING" | "OPENED" | "NOT_OPENED";
+  offeringsCount: number;
+  enrollmentStatus: "ENROLLED" | "WAITLISTED" | "NOT_ENROLLED";
+}
+
+export interface StudyPlanResponse {
+  term: string;
+  isEditable: boolean;
+  phaseMessage: string;
+  totalPlannedCredits: number;
+  maxCredits: number;
+  openedCount: number;
+  notOpenedCount: number;
+  items: StudyPlanItem[];
+}
+
+export interface AdminStudyPlanCourseSummary {
+  courseId: number;
+  code: string;
+  name: string;
+  credits: number;
+  faculty?: string | null;
+  plannedCount: number;
+  minRequired: number;
+  status: "PENDING" | "OPENED" | "NOT_OPENED";
+  offeringsCount: number;
+  recommendedSections: number;
+}
+
+export interface AdminStudyPlanSummaryResponse {
+  term: string;
+  isEditable: boolean;
+  minRequired: number;
+  totalPlans: number;
+  openedCourses: number;
+  notOpenedCourses: number;
+  pendingCourses: number;
+  totalOfferings: number;
+  items: AdminStudyPlanCourseSummary[];
+}
+
+export interface AdminFinalizeStudyPlansResponse {
+  term: string;
+  minStudentsToOpen: number;
+  openedCourses: number;
+  notOpenedCourses: number;
+  createdOfferings: number;
 }

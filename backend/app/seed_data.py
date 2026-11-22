@@ -28,6 +28,8 @@ from app.core.faculty import (
 )
 
 TERM = "2026-1"
+STUDY_PLAN_TERM = "2026-2"
+MIN_PLAN_STUDENTS_TO_OPEN = 15
 SEED = 20261
 ADMIN_EMAIL = "admin@uni.edu.vn"
 ADMIN_PASSWORD = "Admin@123"
@@ -37,14 +39,16 @@ EMAIL_DOMAIN = "uni.edu.vn"
 DEFAULT_STUDENT_COUNT = 1000  # sv0001 ... sv1000
 GENERATED_COURSE_COUNT = 180  # + 12 kit + 8 BAS = 200 học phần ở profile default
 
-# Khung giờ chuẩn (đều nằm trong 07:00-21:00)
-SLOTS = [
-    ("07:00", "09:30"),
-    ("09:30", "12:00"),
-    ("13:00", "15:30"),
-    ("15:30", "18:00"),
-    ("18:00", "20:30"),
+# 5 Ca học chuẩn Đại học Tôn Đức Thắng (mỗi ca 3 tiết = 2 giờ 30 phút)
+# Tập trung vào 4 ca đầu (Ca 1–Ca 4); Ca 5 (buổi tối) chỉ dành cho môn đặc biệt
+MAIN_SHIFTS = [
+    ("06:50", "09:20"),  # Ca 1 (Tiết 1–3)
+    ("09:30", "12:00"),  # Ca 2 (Tiết 4–6)
+    ("12:45", "15:15"),  # Ca 3 (Tiết 7–9)
+    ("15:25", "17:55"),  # Ca 4 (Tiết 10–12)
 ]
+SHIFT_5 = ("18:05", "20:35")  # Ca 5 (Tiết 13–15, chỉ áp dụng môn đặc biệt)
+SLOTS = [*MAIN_SHIFTS, SHIFT_5]
 _BASE_ENROLL = datetime(2026, 8, 1, tzinfo=UTC)
 _BASE_WAIT = datetime(2026, 8, 2, tzinfo=UTC)
 
@@ -133,6 +137,23 @@ class WaitlistRow:
 
 
 @dataclass
+class StudyPlanRow:
+    student_email: str
+    course_code: str
+    term: str = STUDY_PLAN_TERM
+
+
+@dataclass
+class TermCourseOpeningRow:
+    term: str
+    course_code: str
+    planned_count: int
+    min_required: int
+    status: str  # 'PENDING' | 'OPENED' | 'NOT_OPENED'
+    decided_at: datetime | None = None
+
+
+@dataclass
 class Dataset:
     profile: str
     courses: list[CourseRow] = field(default_factory=list)
@@ -142,6 +163,8 @@ class Dataset:
     completed: list[CompletedRow] = field(default_factory=list)
     enrollments: list[EnrollmentRow] = field(default_factory=list)
     waitlist: list[WaitlistRow] = field(default_factory=list)
+    study_plans: list[StudyPlanRow] = field(default_factory=list)
+    course_openings: list[TermCourseOpeningRow] = field(default_factory=list)
 
     # tiện ích tra cứu
     def course(self, code: str) -> CourseRow:
@@ -467,11 +490,19 @@ def _add_generated_courses(ds: Dataset, rng: random.Random) -> None:
             by_level.setdefault(level, []).append(code)
 
 
-def _random_schedule(rng: random.Random) -> list[dict]:
-    n = rng.choice([1, 1, 2])
-    days = rng.sample(range(1, 7), n)  # Thứ Hai - Thứ Bảy
-    slot = rng.choice(SLOTS)
-    return _sched([(d, slot[0], slot[1]) for d in sorted(days)])
+def _is_special_shift5_course(code: str) -> bool:
+    """Ca 5 (18:05–20:35) chỉ dành cho các môn đặc biệt: kỹ năng (BAS), ngoại ngữ (ENG) hoặc chuyên đề năm cuối."""
+    return code.startswith(("BAS", "ENG")) or code in ("INT451",)
+
+
+def _random_schedule(rng: random.Random, *, allow_shift5: bool = False) -> list[dict]:
+    """1 môn học = 1 ca/tuần, tập trung 4 ca đầu (Ca 1–Ca 4); Ca 5 chỉ cho môn đặc biệt."""
+    day = rng.randint(1, 6)  # Thứ Hai - Thứ Bảy
+    if allow_shift5 and rng.random() < 0.25:
+        slot = SHIFT_5
+    else:
+        slot = rng.choice(MAIN_SHIFTS)
+    return _sched([(day, slot[0], slot[1])])
 
 
 def _add_offerings(
@@ -597,7 +628,7 @@ def _generated_students(
     ordered = sorted(ds.courses, key=lambda c: (c.level, c.code))
     for n in range(55, total + 1):
         email = f"sv{n:04d}@{EMAIL_DOMAIN}"
-        if n == 55:
+        if n in (55, 587):
             faculty = FACULTY_CNTT
             program = "Công nghệ thông tin"
         else:
@@ -625,10 +656,33 @@ def _generated_students(
         if n == 55:
             # sv0055: tân sinh viên năm nhất Khoa CNTT (0 tín chỉ tích lũy) dùng cho kịch bản demo
             continue
-        year = rng.choice([1, 1, 2, 2, 3, 3, 4])
+        year = 3 if n == 587 else rng.choice([1, 1, 2, 2, 3, 3, 4])
         reach = 1.5 * year
         done: set[str] = set()
         acc_credits = 0
+        if n == 587:
+            # sv0587: sinh viên năm 3 Khoa CNTT chuẩn (~50-58 TC) dùng cho kịch bản demo
+            for c in ordered:
+                if not course_allowed_for_faculty(c.code, faculty):
+                    continue
+                if c.code in ("INT101", "MAT201", "MAT202") or (
+                    acc_credits < 48
+                    and c.level <= 2
+                    and c.code not in ("INT131", "BAS101", "BAS102")
+                    and acc_credits >= c.min_accumulated_credits
+                    and satisfies(c.code, done, and_map, or_map)
+                ):
+                    done.add(c.code)
+                    acc_credits += c.credits
+                    ds.completed.append(
+                        CompletedRow(
+                            email,
+                            c.code,
+                            round(rng.uniform(7.0, 9.5), 1),
+                            _TERMS[min(c.level - 1 + rng.randint(0, 1), 4)],
+                        )
+                    )
+            continue
         for c in ordered:  # theo tầng tăng dần => tiên quyết luôn được xét trước
             if not course_allowed_for_faculty(c.code, faculty):
                 continue
@@ -656,6 +710,226 @@ def _generated_students(
                         _TERMS[min(c.level - 1 + rng.randint(0, 1), 7)],
                     )
                 )
+
+
+def _add_study_plans_and_openings(
+    ds: Dataset,
+    rng: random.Random,
+    *,
+    term: str = STUDY_PLAN_TERM,
+    min_required: int = MIN_PLAN_STUDENTS_TO_OPEN,
+) -> None:
+    """Sinh kế hoạch học tập (ĐKKHHT) kỳ sau cho từng sinh viên và chốt mở lớp theo ngưỡng."""
+    and_map, or_map = _requirements(ds.prereqs)
+    completed_by_email: dict[str, set[str]] = {}
+    for comp in ds.completed:
+        completed_by_email.setdefault(comp.student_email, set()).add(comp.course_code)
+
+    # Bảo vệ toàn bộ môn có trong KIT_OFFERINGS hoặc đã có enrollment/waitlist không bị loại
+    protected_codes = {code for code, _, _ in KIT_OFFERINGS} | {
+        f"BAS{100 + i}" for i in range(1, 9)
+    }
+    protected_codes |= {e.offering_key[0] for e in ds.enrollments}
+    protected_codes |= {w.offering_key[0] for w in ds.waitlist}
+
+    # Chọn ~10 môn tự chọn/chuyên đề không thuộc bộ cốt lõi để mô phỏng trường hợp
+    # thiếu sinh viên ĐKKHHT (< min_required -> NOT_OPENED, không mở lớp)
+    sv587_student = next(
+        (s for s in ds.students if s.email == "sv0587@uni.edu.vn"), None
+    )
+    sv587_faculty = sv587_student.faculty if sv587_student else FACULTY_CNTT
+    sv587_acc = sv587_student.accumulated_credits if sv587_student else 0
+    sv587_done = completed_by_email.get("sv0587@uni.edu.vn", set())
+    candidate_low = [
+        c.code
+        for c in ds.courses
+        if c.code not in protected_codes
+        and c.min_accumulated_credits <= 24
+        and c.code.startswith(("INT", "MAT", "ELE", "MAN"))
+    ]
+    sv587_low_candidates = [
+        c.code
+        for c in ds.courses
+        if c.code in candidate_low
+        and course_allowed_for_faculty(c.code, sv587_faculty)
+        and sv587_acc >= c.min_accumulated_credits
+        and c.code not in sv587_done
+        and satisfies(c.code, sv587_done, and_map, or_map)
+    ]
+    low_demand_caps: dict[str, int] = {}
+    low_demand_int = (
+        sv587_low_candidates[:2]
+        + [
+            c
+            for c in candidate_low
+            if c.startswith("INT") and c not in sv587_low_candidates[:2]
+        ][-4:]
+    )
+    low_demand_other = [c for c in candidate_low if not c.startswith("INT")][-4:]
+    for idx, code in enumerate(low_demand_int + low_demand_other):
+        low_demand_caps[code] = 4 + (idx % 7)  # 4..10 sinh viên (< 15 -> NOT_OPENED)
+
+    demand_count: dict[str, int] = {c.code: 0 for c in ds.courses}
+    planned_pairs: set[tuple[str, str]] = set()
+
+    # Ưu tiên duyệt sinh viên demo trước để đảm bảo họ có cả môn OPENED lẫn 1 môn NOT_OPENED
+    demo_priority = {
+        "sv0587@uni.edu.vn": 0,
+        "sv0001@uni.edu.vn": 1,
+        "sv0055@uni.edu.vn": 2,
+    }
+    students = [s for s in ds.students if s.role == "student"]
+    students.sort(key=lambda s: (demo_priority.get(s.email, 9), s.email))
+
+    for student in students:
+        done = completed_by_email.get(student.email, set())
+        eligible = [
+            c
+            for c in ds.courses
+            if c.code not in done
+            and course_allowed_for_faculty(c.code, student.faculty)
+            and student.accumulated_credits >= c.min_accumulated_credits
+            and satisfies(c.code, done, and_map, or_map)
+        ]
+        if not eligible:
+            continue
+
+        target_n = rng.randint(4, 6)
+        chosen: list[CourseRow] = []
+        used_credits = 0
+
+        # Đảm bảo tài khoản demo CNTT có sẵn 1 môn NOT_OPENED hợp lệ trong KHHT để trình diễn
+        if student.email in ("sv0587@uni.edu.vn", "sv0001@uni.edu.vn"):
+            low_elig = [
+                c
+                for c in eligible
+                if c.code in low_demand_caps
+                and demand_count[c.code] < low_demand_caps[c.code]
+            ]
+            if low_elig:
+                pick = low_elig[0]
+                chosen.append(pick)
+                used_credits += pick.credits
+
+        # Ưu tiên chọn các môn đúng tiến độ (min_accumulated_credits cao trước) + KIT
+        pool = [c for c in eligible if c not in chosen]
+        rng.shuffle(pool)
+        pool.sort(
+            key=lambda c: (
+                0
+                if c.code in protected_codes and demand_count[c.code] < min_required
+                else 1,
+                -c.min_accumulated_credits,
+            )
+        )
+        for c in pool:
+            if len(chosen) >= target_n:
+                break
+            if used_credits + c.credits > student.max_credits:
+                continue
+            cap = low_demand_caps.get(c.code)
+            if cap is not None and demand_count[c.code] >= cap:
+                continue
+            chosen.append(c)
+            used_credits += c.credits
+
+        for c in chosen:
+            if (student.email, c.code) not in planned_pairs:
+                planned_pairs.add((student.email, c.code))
+                ds.study_plans.append(StudyPlanRow(student.email, c.code, term))
+                demand_count[c.code] += 1
+
+    # Chốt trạng thái mở lớp theo ngưỡng min_required
+    decided_at = datetime(2026, 11, 20, 9, 0, tzinfo=UTC)
+    opened_codes: set[str] = set()
+    for c in ds.courses:
+        cnt = demand_count[c.code]
+        if c.code in low_demand_caps:
+            status = "NOT_OPENED"
+        elif cnt >= min_required or c.code in protected_codes:
+            status = "OPENED"
+            opened_codes.add(c.code)
+        else:
+            status = "NOT_OPENED"
+        ds.course_openings.append(
+            TermCourseOpeningRow(
+                term=term,
+                course_code=c.code,
+                planned_count=cnt,
+                min_required=min_required,
+                status=status,
+                decided_at=decided_at,
+            )
+        )
+
+    def _snap_to_tdtu_shift(schedule: list[dict]) -> list[dict]:
+        """Chuẩn hóa lịch 1 môn = 1 ca theo khung giờ chuẩn TDTU (Ca 1–Ca 5)."""
+        first = schedule[0]
+        day = first["day"]
+        start_min = _to_min(first["start"])
+        if start_min < 9 * 60 + 25:
+            slot = MAIN_SHIFTS[0]  # Ca 1: 06:50–09:20
+        elif start_min < 12 * 60 + 15:
+            slot = MAIN_SHIFTS[1]  # Ca 2: 09:30–12:00
+        elif start_min < 15 * 60 + 20:
+            slot = MAIN_SHIFTS[2]  # Ca 3: 12:45–15:15
+        elif start_min < 18 * 60:
+            slot = MAIN_SHIFTS[3]  # Ca 4: 15:25–17:55
+        else:
+            slot = SHIFT_5  # Ca 5: 18:05–20:35
+        return [{"day": day, "start": slot[0], "end": slot[1]}]
+
+    filtered_offerings = [
+        OfferingRow(
+            course_code=o.course_code,
+            section=o.section,
+            instructor=o.instructor,
+            capacity=o.capacity,
+            schedule=_snap_to_tdtu_shift(o.schedule),
+            room=o.room,
+            enrolled_count=o.enrolled_count,
+            term=term,
+        )
+        for o in ds.offerings
+        if o.course_code in opened_codes
+    ]
+
+    # Tự động mở bổ sung nhiều lớp (02, 03, ...) căn cứ vào số SV ĐKKHHT của từng môn (40 SV/lớp)
+    default_cap = 40
+    existing_sections: dict[str, set[str]] = {}
+    for o in filtered_offerings:
+        existing_sections.setdefault(o.course_code, set()).add(o.section)
+
+    extra_offerings: list[OfferingRow] = []
+    for c in ds.courses:
+        if c.code not in opened_codes:
+            continue
+        planned = demand_count[c.code]
+        needed = max(1, math.ceil(planned / default_cap))
+        used_secs = existing_sections.setdefault(c.code, set())
+        sec_num = 1
+        while len(used_secs) < needed:
+            sec_label = f"{sec_num:02d}"
+            sec_num += 1
+            if sec_label in used_secs:
+                continue
+            used_secs.add(sec_label)
+            extra_offerings.append(
+                OfferingRow(
+                    course_code=c.code,
+                    section=sec_label,
+                    instructor=rng.choice(_INSTRUCTORS),
+                    capacity=default_cap,
+                    schedule=_random_schedule(
+                        rng, allow_shift5=_is_special_shift5_course(c.code)
+                    ),
+                    room=f"B{rng.randint(1, 3)}-{rng.randint(101, 512)}",
+                    enrolled_count=0,
+                    term=term,
+                )
+            )
+
+    ds.offerings = filtered_offerings + extra_offerings
 
 
 LOADTEST_STUDENT_COUNT = 2000
@@ -703,6 +977,10 @@ def build_dataset(
         ) + credits_by_code.get(comp.course_code, 0)
     for s in ds.students:
         s.accumulated_credits = acc_by_email.get(s.email, 0)
+
+    # Sinh kế hoạch học tập kỳ 2026-2 & quyết định mở lớp cho profile 'default'
+    if profile == "default":
+        _add_study_plans_and_openings(ds, rng)
 
     # enrolled_count luôn đúng bằng số đăng ký ACTIVE
     counts: dict[tuple[str, str], int] = {}
@@ -776,8 +1054,8 @@ def _check_offering_schedule(o: OfferingRow) -> list[str]:
     spans: list[tuple[int, int, int]] = []
     for s in o.schedule:
         a, b = _to_min(s["start"]), _to_min(s["end"])
-        if not (1 <= s["day"] <= 7 and 7 * 60 <= a < b <= 21 * 60):
-            errs.append(f"Lịch ngoài khung 07:00-21:00 hoặc sai ngày: {o.key} {s}")
+        if not (1 <= s["day"] <= 7 and (6 * 60 + 50) <= a < b <= 21 * 60):
+            errs.append(f"Lịch ngoài khung 06:50-21:00 hoặc sai ngày: {o.key} {s}")
         if any(d2 == s["day"] and a < b2 and a2 < b for d2, a2, b2 in spans):
             errs.append(f"Các buổi của một lớp chồng nhau: {o.key}")
         spans.append((s["day"], a, b))

@@ -14,6 +14,8 @@ from app.models import (
     Enrollment,
     Prerequisite,
     Student,
+    StudyPlan,
+    TermCourseOpening,
     Waitlist,
 )
 
@@ -48,15 +50,17 @@ def rank_courses_for_student(
     accumulated_credits: int,
     completed_ids: set[int],
     prereq_rows: list[tuple[int, int, str, int]],
+    planned_ids: set[int] | None = None,
 ) -> tuple[dict[int, int], dict[int, str]]:
     """Tính thứ tự ưu tiên & trạng thái đủ điều kiện cho từng học phần của sinh viên.
 
     Thứ tự ưu tiên:
-      0 (RECOMMENDED): Đủ tín chỉ + đủ tiên quyết + đúng tiến độ năm học hiện tại.
+      0 (RECOMMENDED): Đủ tín chỉ + đủ tiên quyết + (nằm trong KHHT hoặc đúng tiến độ năm học).
       1 (ELIGIBLE):    Đủ tín chỉ + đủ tiên quyết (các năm khác / đại cương còn lại).
       2 (LOCKED):      Chưa đủ tín chỉ tích lũy hoặc thiếu môn tiên quyết.
       3 (COMPLETED):   Đã hoàn thành (đẩy xuống cuối danh sách).
     """
+    planned = planned_ids or set()
     student_year = student_academic_year(accumulated_credits)
     and_map: dict[int, list[int]] = defaultdict(list)
     or_map: dict[int, dict[int, list[int]]] = defaultdict(lambda: defaultdict(list))
@@ -69,9 +73,10 @@ def rank_courses_for_student(
     scored: list[tuple[tuple, int, str]] = []
     for cid, code, min_tc in courses:
         target_year = course_target_year(code, min_tc)
+        in_plan = cid in planned
         if cid in completed_ids:
             status = "COMPLETED"
-            key = (3, 0, 0, code)
+            key = (3, 1, 0, 0, code)
         else:
             and_ok = all(p in completed_ids for p in and_map.get(cid, ()))
             or_ok = all(
@@ -80,15 +85,15 @@ def rank_courses_for_student(
             )
             tc_ok = accumulated_credits >= min_tc
             if and_ok and or_ok and tc_ok:
-                if target_year == student_year:
+                if in_plan or target_year == student_year:
                     status = "RECOMMENDED"
-                    key = (0, 0, -min_tc, code)
+                    key = (0, 0 if in_plan else 1, 0, -min_tc, code)
                 else:
                     status = "ELIGIBLE"
-                    key = (1, abs(target_year - student_year), -min_tc, code)
+                    key = (1, 1, abs(target_year - student_year), -min_tc, code)
             else:
                 status = "LOCKED"
-                key = (2, abs(target_year - student_year), min_tc, code)
+                key = (2, 1, abs(target_year - student_year), min_tc, code)
         scored.append((key, cid, status))
 
     scored.sort(key=lambda item: item[0])
@@ -172,6 +177,16 @@ async def search_courses(session: AsyncSession, student_id: int, **filters) -> d
     allowed_prefixes = allowed_prefixes_for_faculty(faculty)
     if allowed_prefixes:
         conditions.append(or_(*[Course.code.like(f"{p}%") for p in allowed_prefixes]))
+    # Ẩn các học phần bị hủy mở lớp (NOT_OPENED) trong học kỳ đang tra cứu
+    conditions.append(
+        ~exists(
+            select(1).where(
+                TermCourseOpening.term == CourseOffering.term,
+                TermCourseOpening.course_id == Course.id,
+                TermCourseOpening.status == "NOT_OPENED",
+            )
+        )
+    )
     for key, column in (
         ("section", CourseOffering.section),
         ("instructor", CourseOffering.instructor),
@@ -229,6 +244,7 @@ async def search_courses(session: AsyncSession, student_id: int, **filters) -> d
     page, size = filters["page"], filters["page_size"]
 
     status_map: dict[int, str] = {}
+    planned_ids: set[int] = set()
     order_clauses: list = []
     if student is not None and student.role == "student":
         course_rows = (
@@ -243,6 +259,16 @@ async def search_courses(session: AsyncSession, student_id: int, **filters) -> d
                 await session.scalars(
                     select(CompletedCourse.course_id).where(
                         CompletedCourse.student_id == student_id
+                    )
+                )
+            ).all()
+        )
+        planned_ids = set(
+            (
+                await session.scalars(
+                    select(StudyPlan.course_id).where(
+                        StudyPlan.student_id == student_id,
+                        StudyPlan.term == term,
                     )
                 )
             ).all()
@@ -262,6 +288,7 @@ async def search_courses(session: AsyncSession, student_id: int, **filters) -> d
             student.accumulated_credits,
             completed_ids,
             [(r[0], r[1], r[2], r[3]) for r in prereq_rows],
+            planned_ids=planned_ids,
         )
         if rank_map:
             order_clauses.append(case(rank_map, value=Course.id, else_=999999))
@@ -279,7 +306,11 @@ async def search_courses(session: AsyncSession, student_id: int, **filters) -> d
     return {
         "items": [
             offering_dict(o, c)
-            | {"my_status": s, "eligibility_status": status_map.get(c.id)}
+            | {
+                "my_status": s,
+                "eligibility_status": status_map.get(c.id),
+                "in_study_plan": c.id in planned_ids,
+            }
             for o, c, s in rows
         ],
         "total": total,

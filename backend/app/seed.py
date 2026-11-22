@@ -28,6 +28,8 @@ from app.models import (
     Enrollment,
     Prerequisite,
     Student,
+    StudyPlan,
+    TermCourseOpening,
     Waitlist,
 )
 from app.seed_data import (
@@ -45,8 +47,9 @@ CHUNK = 5000
 logger = logging.getLogger("seed")
 # Chuỗi hằng cố định (không có dữ liệu người dùng) nên không phải "ghép chuỗi SQL"
 _TRUNCATE_SQL = (
-    "TRUNCATE TABLE waitlist, enrollments, completed_courses, prerequisites, "
-    "course_offerings, courses, students RESTART IDENTITY CASCADE"
+    "TRUNCATE TABLE term_course_openings, study_plans, waitlist, enrollments, "
+    "completed_courses, prerequisites, course_offerings, courses, students "
+    "RESTART IDENTITY CASCADE"
 )
 
 
@@ -198,6 +201,35 @@ async def _load_student_data(
             for w in ds.waitlist
         ],
     )
+    if ds.study_plans:
+        await _insert_many(
+            session,
+            StudyPlan,
+            [
+                dict(
+                    student_id=student_id[sp.student_email],
+                    course_id=course_id[sp.course_code],
+                    term=sp.term,
+                )
+                for sp in ds.study_plans
+            ],
+        )
+    if ds.course_openings:
+        await _insert_many(
+            session,
+            TermCourseOpening,
+            [
+                dict(
+                    term=op.term,
+                    course_id=course_id[op.course_code],
+                    planned_count=op.planned_count,
+                    min_required=op.min_required,
+                    status=op.status,
+                    decided_at=op.decided_at,
+                )
+                for op in ds.course_openings
+            ],
+        )
 
 
 async def load_dataset(session: AsyncSession, ds: Dataset) -> dict[str, int]:
@@ -215,6 +247,8 @@ async def load_dataset(session: AsyncSession, ds: Dataset) -> dict[str, int]:
         "completed_courses": len(ds.completed),
         "enrollments": len(ds.enrollments),
         "waitlist": len(ds.waitlist),
+        "study_plans": len(ds.study_plans),
+        "term_course_openings": len(ds.course_openings),
     }
 
 
