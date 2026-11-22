@@ -18,6 +18,21 @@ class EnrollmentResult(BaseModel):
     position: int | None = None
 
 
+class SwapRequest(BaseModel):
+    from_enrollment_id: int = Field(gt=0)
+    to_offering_id: int = Field(gt=0)
+
+
+class SwapResult(BaseModel):
+    from_enrollment_id: int
+    new_enrollment_id: int
+    from_offering_id: int
+    to_offering_id: int
+    status: Literal["SWAPPED"] = "SWAPPED"
+    version: int = 0
+    promoted_student_id: int | None = None
+
+
 class OfferingItem(BaseModel):
     id: int
     course_id: int

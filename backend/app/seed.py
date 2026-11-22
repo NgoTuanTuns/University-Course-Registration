@@ -13,6 +13,7 @@ import asyncio
 import logging
 import os
 import sys
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 from sqlalchemy import func, insert, select, text
@@ -30,6 +31,7 @@ from app.models import (
     Student,
     StudyPlan,
     TermCourseOpening,
+    TermRegistrationSetting,
     Waitlist,
 )
 from app.seed_data import (
@@ -47,9 +49,9 @@ CHUNK = 5000
 logger = logging.getLogger("seed")
 # Chuỗi hằng cố định (không có dữ liệu người dùng) nên không phải "ghép chuỗi SQL"
 _TRUNCATE_SQL = (
-    "TRUNCATE TABLE term_course_openings, study_plans, waitlist, enrollments, "
-    "completed_courses, prerequisites, course_offerings, courses, students "
-    "RESTART IDENTITY CASCADE"
+    "TRUNCATE TABLE term_registration_settings, term_course_openings, study_plans, "
+    "waitlist, enrollments, completed_courses, prerequisites, course_offerings, "
+    "courses, students RESTART IDENTITY CASCADE"
 )
 
 
@@ -231,6 +233,25 @@ async def _load_student_data(
             ],
         )
 
+    now = datetime.now(UTC)
+    await _insert_many(
+        session,
+        TermRegistrationSetting,
+        [
+            dict(
+                term=get_settings().study_plan_term,
+                phase="ENROLLMENT_OPEN",
+                phase_ends_at=now + timedelta(days=7),
+                note=(
+                    "Đợt đăng ký học phần chính thức Học kỳ 2026-2 "
+                    "(theo kế hoạch học tập đã chốt)."
+                ),
+                updated_by_id=student_id.get(ADMIN_EMAIL),
+                updated_at=now,
+            )
+        ],
+    )
+
 
 async def load_dataset(session: AsyncSession, ds: Dataset) -> dict[str, int]:
     """Ghi toàn bộ dataset trong MỘT transaction (do caller commit). Trả về số dòng từng bảng."""
@@ -249,6 +270,7 @@ async def load_dataset(session: AsyncSession, ds: Dataset) -> dict[str, int]:
         "waitlist": len(ds.waitlist),
         "study_plans": len(ds.study_plans),
         "term_course_openings": len(ds.course_openings),
+        "term_registration_settings": 1,
     }
 
 

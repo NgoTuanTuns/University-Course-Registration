@@ -21,11 +21,15 @@ import {
   Sun,
   Moon,
   Search,
+  Sparkles,
   ChevronRight,
   ShieldCheck,
   Menu,
 } from "lucide-react";
 import { UniFlowLogo } from "./components/UniFlowLogo";
+import { PhaseBanner } from "./components/PhaseBanner";
+import { SwapSectionModal } from "./components/SwapSectionModal";
+import { AutoSchedulerModal } from "./components/AutoSchedulerModal";
 import * as api from "./api";
 import { getSession, setSession } from "./api/http";
 import type { Offering, Enrollment, Session } from "./types";
@@ -51,7 +55,14 @@ export default function App() {
   const [menu, setMenu] = useState(false);
   const [toast, setToast] = useState("");
   const [regs, setRegs] = useState<Enrollment[]>([]);
+  const [waitlistItems, setWaitlistItems] = useState<api.WaitlistEntry[]>([]);
   const [preview, setPreview] = useState<Offering | null>(null);
+  const [swapTarget, setSwapTarget] = useState<Enrollment | null>(null);
+  const [showAutoScheduler, setShowAutoScheduler] = useState(false);
+  const [coursesRefreshTick, setCoursesRefreshTick] = useState(0);
+  const [phaseInfo, setPhaseInfo] = useState<api.RegistrationPhaseInfo | null>(
+    null,
+  );
   const [error, setError] = useState("");
   const location = useLocation();
   const nav = useNavigate();
@@ -61,8 +72,15 @@ export default function App() {
   };
   async function load() {
     try {
-      const nextRegs = await api.timetable();
+      const [nextRegs, nextWaitlist] = await Promise.all([
+        api.timetable(),
+        api
+          .getWaitlist()
+          .then((w) => w.items)
+          .catch(() => [] as api.WaitlistEntry[]),
+      ]);
       setRegs(nextRegs);
+      setWaitlistItems(nextWaitlist);
       setPreview((cur) =>
         cur && nextRegs.some((e) => e.offering.id === cur.id) ? null : cur,
       );
@@ -78,14 +96,42 @@ export default function App() {
   useEffect(() => {
     // Always reset previous user's timetable/preview state on account switch or logout
     setRegs([]);
+    setWaitlistItems([]);
     setPreview(null);
+    setSwapTarget(null);
+    setShowAutoScheduler(false);
+    setPhaseInfo(null);
     setError("");
+    if (session) {
+      api
+        .getRegistrationPhase()
+        .then(setPhaseInfo)
+        .catch(() => {
+          /* phase banner is non-blocking */
+        });
+    }
     if (session?.user.role === "student" && week >= 2) void load();
   }, [session]);
   useEffect(() => {
+    if (!session) return;
+    const syncPhase = () => {
+      api
+        .getRegistrationPhase()
+        .then(setPhaseInfo)
+        .catch(() => {
+          /* non-blocking */
+        });
+    };
+    syncPhase();
+    window.addEventListener("focus", syncPhase);
+    return () => window.removeEventListener("focus", syncPhase);
+  }, [session, location.pathname]);
+  useEffect(() => {
     const expire = () => {
       setRegs([]);
+      setWaitlistItems([]);
       setPreview(null);
+      setPhaseInfo(null);
       setError("");
       updateSession(null);
       notify("Phiên đã hết hạn. Vui lòng đăng nhập lại.");
@@ -220,9 +266,13 @@ export default function App() {
               ...(week >= 2
                 ? [["/timetable", "Thời khóa biểu", CalendarDays]]
                 : []),
-              ...(week >= 4
-                ? [["/waitlist", "Danh sách chờ", LayoutDashboard]]
-                : []),
+              [
+                "/waitlist",
+                waitlistItems.length > 0
+                  ? `Danh sách chờ (${waitlistItems.length})`
+                  : "Danh sách chờ",
+                Clock,
+              ],
               ["/prerequisites", "Sơ đồ tiên quyết", GitBranch],
               ["/academic-record", "Hồ sơ học tập", Award],
             ].map(([path, label, Icon]) => (
@@ -237,6 +287,9 @@ export default function App() {
             ))}
           {session.user.role === "admin" && (
             <>
+              <NavLink to="/admin/phases" onClick={() => setMenu(false)}>
+                <Clock size={19} /> Điều hành đợt ĐK
+              </NavLink>
               <NavLink to="/admin/study-plans" onClick={() => setMenu(false)}>
                 <ShieldCheck size={19} /> Nhu cầu mở lớp
               </NavLink>
@@ -263,7 +316,9 @@ export default function App() {
               await api.logout(session.refreshToken);
             } finally {
               setRegs([]);
+              setWaitlistItems([]);
               setPreview(null);
+              setPhaseInfo(null);
               setError("");
               setSession(null);
               updateSession(null);
@@ -298,6 +353,7 @@ export default function App() {
           </div>
         </header>
         <main>
+          {!admin && <PhaseBanner phase={phaseInfo} />}
           {!admin &&
             location.pathname !== "/" &&
             (() => {
@@ -627,8 +683,14 @@ export default function App() {
                 <Courses
                   week={week}
                   regs={regs}
+                  waitlistItems={waitlistItems}
                   regsCredits={credits}
                   maxCredits={session.user.maxCredits}
+                  canEnroll={phaseInfo?.canEnroll ?? true}
+                  isAdmin={session.user.role === "admin"}
+                  refreshTick={coursesRefreshTick}
+                  onSwap={(enr) => setSwapTarget(enr)}
+                  onOpenAutoScheduler={() => setShowAutoScheduler(true)}
                   notify={notify}
                   changed={load}
                 />
@@ -663,6 +725,13 @@ export default function App() {
                           onClick={() => window.print()}
                         >
                           In thời khóa biểu
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-tdtu-red"
+                          onClick={() => setShowAutoScheduler(true)}
+                        >
+                          <Sparkles size={15} /> Gợi ý xếp lịch tự động
                         </button>
                         <button
                           type="button"
@@ -764,39 +833,155 @@ export default function App() {
                                     ))}
                                   </div>
                                 </div>
-                                <button
-                                  type="button"
-                                  className="btn-danger-soft"
-                                  onClick={async () => {
-                                    if (
-                                      !window.confirm(
-                                        `Bạn có chắc muốn hủy đăng ký môn ${e.offering.code} - ${e.offering.name}?`,
-                                      )
-                                    )
-                                      return;
-                                    try {
-                                      await api.cancel(e.id);
-                                      await load();
-                                      notify(
-                                        `Đã hủy đăng ký môn ${e.offering.name}`,
-                                      );
-                                    } catch (err: unknown) {
-                                      const msg =
-                                        err instanceof Error
-                                          ? err.message
-                                          : "Không thể hủy môn";
-                                      notify(msg);
-                                    }
-                                  }}
+                                <div
+                                  className="actions"
+                                  style={{ marginTop: 0, flexShrink: 0 }}
                                 >
-                                  Hủy đăng ký
-                                </button>
+                                  <button
+                                    type="button"
+                                    className="btn-outline"
+                                    disabled={
+                                      phaseInfo !== null && !phaseInfo.canEnroll
+                                    }
+                                    title={
+                                      phaseInfo !== null && !phaseInfo.canEnroll
+                                        ? `Cổng ĐKMH đang đóng (${phaseInfo.phaseLabel})`
+                                        : "Đổi sang lớp học phần khác cùng môn"
+                                    }
+                                    onClick={() => setSwapTarget(e)}
+                                  >
+                                    Đổi lớp
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="btn-danger-soft"
+                                    disabled={
+                                      phaseInfo !== null && !phaseInfo.canEnroll
+                                    }
+                                    title={
+                                      phaseInfo !== null && !phaseInfo.canEnroll
+                                        ? `Cổng ĐKMH đang đóng (${phaseInfo.phaseLabel})`
+                                        : undefined
+                                    }
+                                    onClick={async () => {
+                                      if (
+                                        !window.confirm(
+                                          `Bạn có chắc muốn hủy đăng ký môn ${e.offering.code} - ${e.offering.name}?`,
+                                        )
+                                      )
+                                        return;
+                                      try {
+                                        await api.cancel(e.id);
+                                        await load();
+                                        notify(
+                                          `Đã hủy đăng ký môn ${e.offering.name}`,
+                                        );
+                                      } catch (err: unknown) {
+                                        const msg =
+                                          err instanceof Error
+                                            ? err.message
+                                            : "Không thể hủy môn";
+                                        notify(msg);
+                                      }
+                                    }}
+                                  >
+                                    Hủy đăng ký
+                                  </button>
+                                </div>
                               </div>
                             );
                           })}
                         </div>
                       )}
                     </section>
+                    {waitlistItems.length > 0 && (
+                      <section className="panel" style={{ marginTop: 18 }}>
+                        <div className="section-title">
+                          <h3>
+                            Lớp đang trong danh sách chờ ({waitlistItems.length}{" "}
+                            lớp)
+                          </h3>
+                          <button
+                            type="button"
+                            className="text-button"
+                            onClick={() => nav("/waitlist")}
+                          >
+                            Mở trang Danh sách chờ →
+                          </button>
+                        </div>
+                        <div className="tt-enrolled-list">
+                          {waitlistItems.map((w) => (
+                            <div className="tt-enrolled-card" key={w.id}>
+                              <span
+                                className="tt-color-dot"
+                                style={{ background: "#d97706" }}
+                              />
+                              <div className="tt-enrolled-main">
+                                <div className="tt-enrolled-top">
+                                  <b>{w.offering.code}</b>
+                                  <span className="pill">
+                                    Lớp {w.offering.section}
+                                  </span>
+                                  <span
+                                    className="pill"
+                                    style={{
+                                      background: "#fef3c7",
+                                      color: "#92400e",
+                                    }}
+                                  >
+                                    Chờ vị trí #{w.position}
+                                  </span>
+                                </div>
+                                <div className="tt-enrolled-name">
+                                  {w.offering.name}
+                                </div>
+                                <div className="tt-enrolled-meta">
+                                  <span>GV: {w.offering.instructor}</span>
+                                  <span>·</span>
+                                  <span>Phòng {w.offering.room}</span>
+                                  {w.offering.schedule.map((s, idx) => (
+                                    <span key={idx} className="tt-slot-chip">
+                                      {s.day === 7 ? "CN" : `T${s.day + 1}`} ·{" "}
+                                      {s.start}–{s.end}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                className="btn-danger-soft"
+                                disabled={
+                                  phaseInfo !== null && !phaseInfo.canEnroll
+                                }
+                                onClick={async () => {
+                                  if (
+                                    !window.confirm(
+                                      `Bạn có chắc muốn hủy danh sách chờ môn ${w.offering.code} — ${w.offering.name} (Lớp ${w.offering.section})?`,
+                                    )
+                                  )
+                                    return;
+                                  try {
+                                    await api.leaveWaitlist(w.id);
+                                    await load();
+                                    notify(
+                                      `Đã hủy danh sách chờ môn ${w.offering.name}`,
+                                    );
+                                  } catch (err: unknown) {
+                                    notify(
+                                      err instanceof Error
+                                        ? err.message
+                                        : "Không thể hủy danh sách chờ",
+                                    );
+                                  }
+                                }}
+                              >
+                                Hủy danh sách chờ
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </section>
+                    )}
                   </>
                 ) : (
                   <Navigate to="/courses" />
@@ -806,11 +991,11 @@ export default function App() {
             <Route
               path="/waitlist"
               element={
-                week >= 4 ? (
-                  <Waitlist notify={notify} changed={load} />
-                ) : (
-                  <Navigate to="/" />
-                )
+                <Waitlist
+                  canEnroll={phaseInfo?.canEnroll ?? true}
+                  notify={notify}
+                  changed={load}
+                />
               }
             />
             <Route
@@ -860,7 +1045,7 @@ export default function App() {
                       </div>
                     }
                   >
-                    <AdminPanel notify={notify} />
+                    <AdminPanel notify={notify} onPhaseUpdated={setPhaseInfo} />
                   </Suspense>
                 ) : (
                   <Navigate to="/" replace />
@@ -883,6 +1068,30 @@ export default function App() {
           <span>Thiết kế cho hành trình học tập của bạn.</span>
         </footer>
       </section>
+      {swapTarget && (
+        <SwapSectionModal
+          current={swapTarget}
+          regs={regs}
+          onClose={() => setSwapTarget(null)}
+          onSwapped={async () => {
+            await load();
+            setCoursesRefreshTick((n) => n + 1);
+          }}
+          notify={notify}
+        />
+      )}
+      {showAutoScheduler && session.user.role === "student" && (
+        <AutoSchedulerModal
+          regs={regs}
+          canEnroll={phaseInfo?.canEnroll ?? true}
+          onClose={() => setShowAutoScheduler(false)}
+          onEnrolled={async () => {
+            await load();
+            setCoursesRefreshTick((n) => n + 1);
+          }}
+          notify={notify}
+        />
+      )}
       {toast && (
         <div className="toast" role="status" aria-live="polite">
           {toast}
@@ -897,15 +1106,27 @@ export default function App() {
 function Courses({
   week,
   regs,
+  waitlistItems,
   regsCredits,
   maxCredits,
+  canEnroll,
+  isAdmin,
+  refreshTick,
+  onSwap,
+  onOpenAutoScheduler,
   notify,
   changed,
 }: {
   week: number;
   regs: Enrollment[];
+  waitlistItems: api.WaitlistEntry[];
   regsCredits: number;
   maxCredits: number;
+  canEnroll: boolean;
+  isAdmin: boolean;
+  refreshTick: number;
+  onSwap: (enr: Enrollment) => void;
+  onOpenAutoScheduler: () => void;
   notify: (s: string) => void;
   changed: () => Promise<void>;
 }) {
@@ -918,8 +1139,69 @@ function Courses({
   const [previewOffering, setPreviewOffering] = useState<Offering | null>(null);
   const [selected, setSelected] = useState<Offering | null>(null);
   const [busy, setBusy] = useState(false);
+  const [adminBusyId, setAdminBusyId] = useState<number | null>(null);
+  const [waitlistBusyId, setWaitlistBusyId] = useState<number | null>(null);
   const [reason, setReason] = useState("");
-  const enrolledOfferingIds = new Set(regs.map((e) => e.offering.id));
+  const enrolledByOfferingId = new Map(regs.map((e) => [e.offering.id, e]));
+  const waitlistByOfferingId = new Map(
+    waitlistItems.map((w) => [w.offeringId, w]),
+  );
+
+  async function handleLeaveWaitlist(entry: api.WaitlistEntry) {
+    if (waitlistBusyId !== null) return;
+    if (
+      !window.confirm(
+        `Bạn có chắc muốn hủy danh sách chờ môn ${entry.offering.code} — ${entry.offering.name} (Lớp ${entry.offering.section})?`,
+      )
+    ) {
+      return;
+    }
+    setWaitlistBusyId(entry.id);
+    try {
+      await api.leaveWaitlist(entry.id);
+      await changed();
+      notify(`Đã hủy danh sách chờ môn ${entry.offering.name}`);
+    } catch (e) {
+      notify((e as Error).message);
+    } finally {
+      setWaitlistBusyId(null);
+    }
+  }
+
+  async function handleAdminFill(o: Offering) {
+    if (adminBusyId !== null) return;
+    if (
+      !window.confirm(
+        `Làm đầy sĩ số lớp ${o.code} - Lớp ${o.section} lên ${o.capacity}/${o.capacity} để kiểm thử hàng chờ (Waitlist)?`,
+      )
+    ) {
+      return;
+    }
+    setAdminBusyId(o.id);
+    try {
+      const res = await api.fillAdminOffering(o.id);
+      notify(res.message);
+      setRetry((n) => n + 1);
+    } catch (e) {
+      notify((e as Error).message);
+    } finally {
+      setAdminBusyId(null);
+    }
+  }
+
+  async function handleAdminRelease(o: Offering) {
+    if (adminBusyId !== null) return;
+    setAdminBusyId(o.id);
+    try {
+      const res = await api.releaseAdminOfferingSeat(o.id);
+      notify(res.message);
+      setRetry((n) => n + 1);
+    } catch (e) {
+      notify((e as Error).message);
+    } finally {
+      setAdminBusyId(null);
+    }
+  }
   useEffect(() => {
     if (!previewOffering) return;
     const onKey = (e: KeyboardEvent) => {
@@ -950,7 +1232,7 @@ function Courses({
       clearTimeout(timer);
       controller.abort();
     };
-  }, [params, retry]);
+  }, [params, retry, refreshTick]);
   function filter(k: string, v: string) {
     const p = new URLSearchParams(params);
     if (v) p.set(k, v);
@@ -978,6 +1260,7 @@ function Courses({
               `Lớp học phần đã hết chỗ (${selected.enrolledCount}/${selected.capacity}). Bạn đã được ghi danh vào Danh sách chờ (Waitlist) ở vị trí thứ ${res.position || 1}.`,
             );
             notify(`Đã đưa vào danh sách chờ môn ${selected.name}`);
+            await changed();
           } else {
             setReason(
               "🎉 Đăng ký học phần thành công! Môn học đã được ghi nhận vào thời khóa biểu.",
@@ -1053,13 +1336,27 @@ function Courses({
     <>
       <div className="page-heading">
         <div>
-          <h1>Tra cứu học phần</h1>
+          <h1>
+            {isAdmin ? "Danh mục lớp mở (Quản trị sĩ số)" : "Tra cứu học phần"}
+          </h1>
           <p className="muted">
-            Danh sách tự động ưu tiên các môn đúng tiến độ và đủ điều kiện đăng
-            ký của bạn.
+            {isAdmin
+              ? "Tìm kiếm lớp học phần để làm đầy sĩ số hoặc giải phóng 1 chỗ nhằm kiểm thử kịch bản đầy lớp và hàng chờ (Waitlist)."
+              : "Danh sách tự động ưu tiên các môn đúng tiến độ và đủ điều kiện đăng ký của bạn."}
           </p>
         </div>
-        <span className="pill">Học kỳ 2026-2</span>
+        <div className="actions" style={{ marginTop: 0, alignItems: "center" }}>
+          {!isAdmin && (
+            <button
+              type="button"
+              className="btn-tdtu-red"
+              onClick={onOpenAutoScheduler}
+            >
+              <Sparkles size={15} /> Gợi ý xếp lịch tự động
+            </button>
+          )}
+          <span className="pill">Học kỳ 2026-2</span>
+        </div>
       </div>
       <section className="panel filters">
         <div className="section-title">
@@ -1140,7 +1437,9 @@ function Courses({
               </thead>
               <tbody>
                 {items.map((o) => {
-                  const isEnrolled = enrolledOfferingIds.has(o.id);
+                  const enrolledEntry = enrolledByOfferingId.get(o.id);
+                  const isEnrolled = Boolean(enrolledEntry);
+                  const waitlistEntry = waitlistByOfferingId.get(o.id);
                   return (
                     <tr
                       key={o.id}
@@ -1164,6 +1463,19 @@ function Courses({
                           </b>
                           {isEnrolled && (
                             <span className="enrolled-badge">Đã đăng ký</span>
+                          )}
+                          {!isEnrolled && waitlistEntry && (
+                            <span
+                              style={{
+                                fontSize: 10,
+                                fontWeight: 700,
+                                padding: "2px 6px",
+                                background: "#fef3c7",
+                                color: "#92400e",
+                              }}
+                            >
+                              Đang chờ (#{waitlistEntry.position})
+                            </span>
                           )}
                           {o.inStudyPlan && (
                             <span
@@ -1281,13 +1593,78 @@ function Courses({
                       </td>
                       <td>
                         <div className="actions">
-                          {isEnrolled ? (
+                          {isAdmin ? (
+                            <>
+                              <button
+                                type="button"
+                                className="btn-tdtu-red"
+                                disabled={
+                                  adminBusyId !== null ||
+                                  o.enrolledCount >= o.capacity
+                                }
+                                onClick={() => void handleAdminFill(o)}
+                              >
+                                {adminBusyId === o.id
+                                  ? "Đang xử lý…"
+                                  : o.enrolledCount >= o.capacity
+                                    ? "Đã đầy"
+                                    : "Làm đầy sĩ số"}
+                              </button>
+                              <button
+                                type="button"
+                                className="btn-outline"
+                                disabled={
+                                  adminBusyId !== null || o.enrolledCount <= 0
+                                }
+                                title="Hủy 1 sinh viên nền để nhả 1 chỗ và tự động đôn sinh viên đầu hàng chờ (Waitlist)"
+                                onClick={() => void handleAdminRelease(o)}
+                              >
+                                Giải phóng 1 chỗ
+                              </button>
+                            </>
+                          ) : isEnrolled && enrolledEntry ? (
+                            <>
+                              <button
+                                type="button"
+                                className="btn-outline"
+                                disabled={!canEnroll}
+                                title={
+                                  !canEnroll
+                                    ? "Cổng đăng ký học phần hiện đang đóng"
+                                    : "Đổi sang lớp khác cùng học phần"
+                                }
+                                onClick={() => onSwap(enrolledEntry)}
+                              >
+                                Đổi lớp
+                              </button>
+                              <button
+                                type="button"
+                                className="btn-enrolled-disabled"
+                                disabled
+                              >
+                                Đã đăng ký
+                              </button>
+                            </>
+                          ) : waitlistEntry ? (
                             <button
                               type="button"
-                              className="btn-enrolled-disabled"
-                              disabled
+                              className="btn-danger-soft"
+                              disabled={
+                                !canEnroll ||
+                                waitlistBusyId === waitlistEntry.id
+                              }
+                              title={
+                                !canEnroll
+                                  ? "Cổng đăng ký học phần hiện đang đóng"
+                                  : undefined
+                              }
+                              onClick={() =>
+                                void handleLeaveWaitlist(waitlistEntry)
+                              }
                             >
-                              Đã đăng ký
+                              {waitlistBusyId === waitlistEntry.id
+                                ? "Đang hủy…"
+                                : "Hủy danh sách chờ"}
                             </button>
                           ) : (
                             <>
@@ -1303,14 +1680,22 @@ function Courses({
                               {week >= 3 && (
                                 <button
                                   className="primary"
+                                  disabled={!canEnroll}
+                                  title={
+                                    !canEnroll
+                                      ? "Cổng đăng ký học phần hiện đang đóng"
+                                      : undefined
+                                  }
                                   onClick={() => {
                                     setSelected(o);
                                     setReason("");
                                   }}
                                 >
-                                  {o.enrolledCount >= o.capacity
-                                    ? "Vào danh sách chờ"
-                                    : "Đăng ký học phần"}
+                                  {!canEnroll
+                                    ? "Cổng ĐKMH đóng"
+                                    : o.enrolledCount >= o.capacity
+                                      ? "Vào danh sách chờ"
+                                      : "Đăng ký học phần"}
                                 </button>
                               )}
                             </>
@@ -1455,7 +1840,7 @@ function Courses({
                     </small>
                   </div>
                   <div className="actions" style={{ marginTop: 0 }}>
-                    {week >= 3 && !alreadyEnrolled && (
+                    {week >= 3 && !alreadyEnrolled && canEnroll && (
                       <button
                         type="button"
                         className="btn-tdtu-red"
@@ -1552,9 +1937,11 @@ function Courses({
   );
 }
 function Waitlist({
+  canEnroll,
   notify,
   changed,
 }: {
+  canEnroll: boolean;
   notify: (s: string) => void;
   changed: () => Promise<void>;
 }) {
@@ -1648,22 +2035,35 @@ function Waitlist({
                 </small>
               )}
               <button
-                className="text-button"
-                style={{ color: "#ef4444", marginLeft: "auto" }}
+                type="button"
+                className="btn-danger-soft"
+                style={{ marginLeft: "auto" }}
+                disabled={!canEnroll}
+                title={
+                  !canEnroll
+                    ? "Cổng đăng ký học phần hiện đang đóng"
+                    : undefined
+                }
                 onClick={async () => {
+                  if (
+                    !window.confirm(
+                      `Bạn có chắc muốn hủy danh sách chờ môn ${item.offering.code} — ${item.offering.name} (Lớp ${item.offering.section})?`,
+                    )
+                  )
+                    return;
                   try {
                     leftRef.current.add(item.id);
                     await api.leaveWaitlist(item.id);
                     await load();
                     await changed();
-                    notify("Đã rời danh sách chờ");
+                    notify(`Đã hủy danh sách chờ môn ${item.offering.name}`);
                   } catch (e) {
                     leftRef.current.delete(item.id);
                     notify((e as Error).message);
                   }
                 }}
               >
-                Rời hàng chờ
+                Hủy danh sách chờ
               </button>
             </div>
           ))

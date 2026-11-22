@@ -24,7 +24,11 @@ from app.schemas.prerequisite import (
     PrereqListResponse,
     PrereqUpdate,
 )
-from app.services import course_service, prerequisite_admin_service
+from app.services import (
+    course_service,
+    offering_admin_service,
+    prerequisite_admin_service,
+)
 
 router = APIRouter(
     prefix="/admin",
@@ -33,6 +37,7 @@ router = APIRouter(
 
 courses_router = APIRouter(prefix="/courses", tags=["admin-courses"])
 prereqs_router = APIRouter(prefix="/prereqs", tags=["admin-prereqs"])
+offerings_router = APIRouter(prefix="/offerings", tags=["admin-offerings"])
 
 
 # ===========================================================================
@@ -180,6 +185,30 @@ async def delete_prerequisite(
     )
 
 
+# ===========================================================================
+# 3. Quản trị sĩ số lớp học phần phục vụ test đầy lớp / Waitlist (/admin/offerings)
+# ===========================================================================
+
+
+@offerings_router.post("/{offering_id}/fill")
+async def fill_offering(
+    offering_id: int,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> dict:
+    """Làm đầy sĩ số một lớp học phần để kiểm thử kịch bản đầy chỗ và danh sách chờ."""
+    return await offering_admin_service.fill_offering_to_capacity(session, offering_id)
+
+
+@offerings_router.post("/{offering_id}/release-seat")
+async def release_offering_seat(
+    offering_id: int,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> dict:
+    """Giải phóng 1 chỗ trống (hủy 1 sinh viên nền) để kích hoạt đôn Waitlist tự động."""
+    return await offering_admin_service.release_one_seat(session, offering_id)
+
+
 # Kết nối subrouters vào router chính của admin
 router.include_router(courses_router)
 router.include_router(prereqs_router)
+router.include_router(offerings_router)

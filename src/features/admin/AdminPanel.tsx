@@ -6,19 +6,30 @@ import { formatPrereqCycleMessage } from "../registration/helpers";
 
 export default function AdminPanel({
   notify,
+  onPhaseUpdated,
 }: {
   notify: (s: string) => void;
+  onPhaseUpdated?: (phase: api.RegistrationPhaseInfo) => void;
 }) {
   return (
     <div>
       <Routes>
+        <Route
+          path="phases"
+          element={
+            <AdminRegistrationPhases
+              notify={notify}
+              onPhaseUpdated={onPhaseUpdated}
+            />
+          }
+        />
         <Route path="courses" element={<AdminCourses notify={notify} />} />
         <Route path="prereqs" element={<AdminPrereqs notify={notify} />} />
         <Route
           path="study-plans"
           element={<AdminStudyPlans notify={notify} />}
         />
-        <Route path="*" element={<Navigate to="/admin/courses" replace />} />
+        <Route path="*" element={<Navigate to="/admin/phases" replace />} />
       </Routes>
     </div>
   );
@@ -785,6 +796,293 @@ function AdminStudyPlans({ notify }: { notify: (s: string) => void }) {
           </div>
         )}
       </section>
+    </div>
+  );
+}
+
+const PHASE_STEPS: {
+  code: api.RegistrationPhaseCode;
+  step: string;
+  title: string;
+  khht: string;
+  dkmh: string;
+  summary: string;
+}[] = [
+  {
+    code: "STUDY_PLAN_OPEN",
+    step: "01",
+    title: "Đợt ĐKKHHT",
+    khht: "Mở (Thêm / Xóa)",
+    dkmh: "Đóng",
+    summary: "Sinh viên chọn danh sách môn dự kiến học kỳ tới.",
+  },
+  {
+    code: "CLASS_OPENING_REVIEW",
+    step: "02",
+    title: "Chốt mở lớp",
+    khht: "Chỉ xem (Đã khóa)",
+    dkmh: "Đóng",
+    summary: "Phòng Đào tạo tổng hợp nhu cầu & chạy Chốt mở lớp.",
+  },
+  {
+    code: "ENROLLMENT_OPEN",
+    step: "03",
+    title: "Đợt ĐKMH chính thức",
+    khht: "Chỉ xem (Đã khóa)",
+    dkmh: "Mở (Đăng ký / Hủy)",
+    summary: "Sinh viên đăng ký lớp học phần, đổi lớp và xếp TKB.",
+  },
+  {
+    code: "LOCKED",
+    step: "04",
+    title: "Đã khóa sổ học kỳ",
+    khht: "Chỉ xem",
+    dkmh: "Chỉ xem TKB",
+    summary: "Kết thúc toàn bộ thao tác đăng ký học phần học kỳ.",
+  },
+];
+
+function toDatetimeLocalValue(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function AdminRegistrationPhases({
+  notify,
+  onPhaseUpdated,
+}: {
+  notify: (s: string) => void;
+  onPhaseUpdated?: (phase: api.RegistrationPhaseInfo) => void;
+}) {
+  const [current, setCurrent] = useState<api.RegistrationPhaseInfo | null>(
+    null,
+  );
+  const [selectedPhase, setSelectedPhase] =
+    useState<api.RegistrationPhaseCode>("ENROLLMENT_OPEN");
+  const [endsAtLocal, setEndsAtLocal] = useState("");
+  const [note, setNote] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    api
+      .getRegistrationPhase("2026-2")
+      .then((info) => {
+        if (!active) return;
+        setCurrent(info);
+        setSelectedPhase(info.phase);
+        setEndsAtLocal(toDatetimeLocalValue(info.phaseEndsAt));
+        setNote(info.note || "");
+      })
+      .catch((e) => {
+        if (active) notify((e as Error).message);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [notify]);
+
+  const applyPresetDays = (days: number | null) => {
+    if (days === null) {
+      setEndsAtLocal("");
+      return;
+    }
+    const target = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+    setEndsAtLocal(toDatetimeLocalValue(target.toISOString()));
+  };
+
+  const handleSave = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!current) return;
+    if (
+      selectedPhase !== current.phase &&
+      !window.confirm(
+        `Chuyển giai đoạn học kỳ ${current.term} sang "${PHASE_STEPS.find((s) => s.code === selectedPhase)?.title}"? Thay đổi sẽ áp dụng ngay lập tức cho toàn bộ sinh viên.`,
+      )
+    ) {
+      return;
+    }
+    setSaving(true);
+    try {
+      const endsIso = endsAtLocal ? new Date(endsAtLocal).toISOString() : null;
+      const updated = await api.updateRegistrationPhase({
+        term: current.term,
+        phase: selectedPhase,
+        phaseEndsAt: endsIso,
+        note: note.trim() || null,
+      });
+      setCurrent(updated);
+      onPhaseUpdated?.(updated);
+      notify(`Đã cập nhật giai đoạn sang "${updated.phaseLabel}".`);
+    } catch (err) {
+      notify((err as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const activeStepMeta =
+    PHASE_STEPS.find((s) => s.code === selectedPhase) || PHASE_STEPS[2];
+
+  return (
+    <div>
+      <div className="page-heading">
+        <div>
+          <h1>Điều hành giai đoạn đợt đăng ký</h1>
+          <p className="muted">
+            Chuyển đổi trực tiếp giữa các giai đoạn ĐKKHHT, Chốt mở lớp, ĐKMH
+            chính thức và Khóa sổ cho Học kỳ 2026-2.
+          </p>
+        </div>
+        <span className="pill">
+          Hiện tại: {current?.phaseLabel || "Đang tải…"}
+        </span>
+      </div>
+
+      {loading ? (
+        <div className="skeleton">Đang tải cấu hình đợt đăng ký…</div>
+      ) : (
+        <>
+          <section className="panel" style={{ marginBottom: 18 }}>
+            <div className="section-title">
+              <h3>Tiến trình học kỳ 2026-2</h3>
+              {current?.updatedAt && (
+                <span className="muted">
+                  Cập nhật lần cuối:{" "}
+                  {new Date(current.updatedAt).toLocaleString("vi-VN")}
+                </span>
+              )}
+            </div>
+            <div className="phase-stepper">
+              {PHASE_STEPS.map((st) => {
+                const isLive = current?.phase === st.code;
+                const isPicked = selectedPhase === st.code;
+                return (
+                  <button
+                    key={st.code}
+                    type="button"
+                    className={`phase-step ${isPicked ? "is-selected" : ""} ${isLive ? "is-live" : ""}`}
+                    onClick={() => setSelectedPhase(st.code)}
+                  >
+                    <div className="phase-step-top">
+                      <span className="mono-id">BƯỚC {st.step}</span>
+                      {isLive && (
+                        <span className="phase-live-dot">Đang chạy</span>
+                      )}
+                    </div>
+                    <strong>{st.title}</strong>
+                    <small>{st.summary}</small>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+
+          <section className="panel">
+            <form onSubmit={handleSave} style={{ display: "grid", gap: 18 }}>
+              <div className="metric-strip" style={{ marginBottom: 0 }}>
+                <div className="metric-cell" style={{ cursor: "default" }}>
+                  <span className="metric-label">Giai đoạn đã chọn</span>
+                  <strong className="metric-value" style={{ fontSize: 19 }}>
+                    {activeStepMeta.title}
+                  </strong>
+                  <small>{activeStepMeta.summary}</small>
+                </div>
+                <div className="metric-cell" style={{ cursor: "default" }}>
+                  <span className="metric-label">Quyền Kế hoạch học tập</span>
+                  <strong className="metric-value" style={{ fontSize: 19 }}>
+                    {activeStepMeta.khht}
+                  </strong>
+                  <small>Áp dụng tại /study-plan</small>
+                </div>
+                <div className="metric-cell" style={{ cursor: "default" }}>
+                  <span className="metric-label">Quyền Đăng ký học phần</span>
+                  <strong className="metric-value" style={{ fontSize: 19 }}>
+                    {activeStepMeta.dkmh}
+                  </strong>
+                  <small>Áp dụng tại /courses và /timetable</small>
+                </div>
+              </div>
+
+              <div
+                className="filter-grid"
+                style={{ gridTemplateColumns: "1fr 1.4fr" }}
+              >
+                <label>
+                  Thời điểm kết thúc giai đoạn (đếm ngược cho sinh viên)
+                  <input
+                    type="datetime-local"
+                    value={endsAtLocal}
+                    onChange={(e) => setEndsAtLocal(e.target.value)}
+                  />
+                  <div
+                    className="actions"
+                    style={{ marginTop: 8, gap: 6, flexWrap: "wrap" }}
+                  >
+                    <button
+                      type="button"
+                      className="btn-outline"
+                      onClick={() => applyPresetDays(3)}
+                    >
+                      +3 ngày
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-outline"
+                      onClick={() => applyPresetDays(7)}
+                    >
+                      +7 ngày
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-outline"
+                      onClick={() => applyPresetDays(14)}
+                    >
+                      +14 ngày
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-outline"
+                      onClick={() => applyPresetDays(null)}
+                    >
+                      Bỏ hạn
+                    </button>
+                  </div>
+                </label>
+
+                <label>
+                  Thông báo hiển thị trên cổng sinh viên
+                  <textarea
+                    rows={3}
+                    maxLength={300}
+                    placeholder="Ví dụ: Đợt đăng ký học phần chính thức Học kỳ 2026-2..."
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                  />
+                </label>
+              </div>
+
+              <div className="actions" style={{ justifyContent: "flex-end" }}>
+                <button
+                  type="submit"
+                  className="btn-tdtu-red"
+                  disabled={saving}
+                >
+                  {saving ? "Đang lưu thay đổi…" : "Áp dụng giai đoạn này ngay"}
+                </button>
+              </div>
+            </form>
+          </section>
+        </>
+      )}
     </div>
   );
 }

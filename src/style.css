@@ -1990,7 +1990,133 @@ tbody tr.row-enrolled .capacity i {
   border-color: #475569 !important;
 }
 
+/* ===== Registration Phase Banner & Admin Stepper ===== */
+.phase-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 11px 16px;
+  margin-bottom: 16px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--accent);
+  font-size: 13px;
+}
+.phase-banner.is-open {
+  border-left-color: #059669;
+}
+.phase-banner.is-plan {
+  border-left-color: #004b91;
+}
+.phase-banner.is-review {
+  border-left-color: #d97706;
+}
+.phase-banner.is-locked {
+  border-left-color: #d71920;
+}
+.phase-banner-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.phase-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 3px 9px;
+  background: var(--accent);
+  color: #ffffff;
+}
+.phase-banner.is-open .phase-badge {
+  background: #047857;
+}
+.phase-banner.is-review .phase-badge {
+  background: #b45309;
+}
+.phase-banner.is-locked .phase-badge {
+  background: #d71920;
+}
+.phase-text {
+  color: var(--text);
+  line-height: 1.45;
+}
+.phase-countdown {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--soft);
+  padding: 4px 10px;
+  white-space: nowrap;
+}
+
+.phase-stepper {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+.phase-step {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+  gap: 6px;
+  padding: 14px 16px;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-top: 3px solid var(--border);
+  cursor: pointer;
+}
+.phase-step:hover {
+  background: var(--soft);
+  filter: none;
+}
+.phase-step.is-live {
+  border-top-color: #059669;
+}
+.phase-step.is-selected {
+  border-color: var(--accent);
+  border-top: 3px solid var(--accent);
+  background: var(--soft);
+}
+.phase-step-top {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.phase-step strong {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+.phase-step small {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+.phase-live-dot {
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 2px 7px;
+  background: #047857;
+  color: #ffffff;
+}
+
 @media (max-width: 980px) {
+  .phase-stepper {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
   .dash-header {
     flex-direction: column;
     align-items: stretch;

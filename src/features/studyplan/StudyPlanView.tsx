@@ -11,7 +11,28 @@ export default function StudyPlanView({
 }) {
   const [plan, setPlan] = useState<StudyPlanResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [removingId, setRemovingId] = useState<number | null>(null);
   const nav = useNavigate();
+
+  const handleRemove = async (planId: number, code: string, name: string) => {
+    if (
+      !window.confirm(
+        `Bạn có chắc muốn xóa học phần ${code} — ${name} khỏi Kế hoạch học tập?`,
+      )
+    ) {
+      return;
+    }
+    setRemovingId(planId);
+    try {
+      const updated = await api.removeFromStudyPlan(planId);
+      setPlan(updated);
+      notify(`Đã xóa ${code} khỏi Kế hoạch học tập.`);
+    } catch (e) {
+      notify((e as Error).message);
+    } finally {
+      setRemovingId(null);
+    }
+  };
 
   useEffect(() => {
     let active = true;
@@ -263,20 +284,46 @@ export default function StudyPlanView({
                             )}
                           </td>
                           <td>
-                            {isOpened ? (
+                            {plan.isEditable ? (
                               <button
                                 type="button"
-                                className="primary"
+                                className="btn-danger-soft"
+                                style={{ padding: "7px 12px", fontSize: 12 }}
+                                disabled={removingId === item.id}
+                                onClick={() =>
+                                  void handleRemove(
+                                    item.id,
+                                    item.code,
+                                    item.name,
+                                  )
+                                }
+                              >
+                                {removingId === item.id
+                                  ? "Đang xóa…"
+                                  : "Xóa khỏi KHHT"}
+                              </button>
+                            ) : isOpened ? (
+                              <button
+                                type="button"
+                                className={
+                                  item.enrollmentStatus === "WAITLISTED"
+                                    ? "btn-outline"
+                                    : "primary"
+                                }
                                 style={{ padding: "7px 12px", fontSize: 12 }}
                                 onClick={() =>
                                   nav(
-                                    `/courses?q=${encodeURIComponent(item.code)}`,
+                                    item.enrollmentStatus === "WAITLISTED"
+                                      ? "/waitlist"
+                                      : `/courses?q=${encodeURIComponent(item.code)}`,
                                   )
                                 }
                               >
                                 {item.enrollmentStatus === "ENROLLED"
                                   ? "Xem lớp"
-                                  : "Chọn lớp ngay"}
+                                  : item.enrollmentStatus === "WAITLISTED"
+                                    ? "Xem / Hủy chờ"
+                                    : "Chọn lớp ngay"}
                               </button>
                             ) : (
                               <span className="muted" style={{ fontSize: 12 }}>

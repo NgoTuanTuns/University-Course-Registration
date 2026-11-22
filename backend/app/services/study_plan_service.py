@@ -21,6 +21,7 @@ from app.models import (
     TermCourseOpening,
     Waitlist,
 )
+from app.services.phase_service import assert_study_plan_open, get_registration_phase
 from app.services.prerequisite_engine import check_eligibility
 
 _DEFAULT_SLOTS = [
@@ -36,17 +37,6 @@ _DEFAULT_SLOTS = [
 def _faculty_label(code: str) -> str:
     prefix = "".join(ch for ch in code if ch.isalpha())[:3].upper()
     return PREFIX_TO_FACULTY.get(prefix, "Đại cương / Chung")
-
-
-def _ensure_study_plan_open() -> None:
-    settings = get_settings()
-    if not settings.study_plan_editable:
-        raise api_error(
-            403,
-            "STUDY_PLAN_PERIOD_CLOSED",
-            f"Đợt Đăng ký Kế hoạch học tập học kỳ {settings.study_plan_term} đã kết thúc. "
-            "Sinh viên không thể thêm hoặc xóa học phần trong KHHT.",
-        )
 
 
 async def get_student_study_plan(
@@ -163,16 +153,19 @@ async def get_student_study_plan(
     order = {"OPENED": 0, "PENDING": 1, "NOT_OPENED": 2}
     items.sort(key=lambda x: (order[x["opening_status"]], x["code"]))
 
+    phase_info = await get_registration_phase(session, term=target_term)
+    is_editable = bool(phase_info["can_edit_study_plan"])
     phase_message = (
         f"Cổng Đăng ký Kế hoạch học tập học kỳ {target_term} đang mở."
-        if settings.study_plan_editable
-        else f"Đợt Đăng ký Kế hoạch học tập học kỳ {target_term} đã kết thúc. "
+        if is_editable
+        else f"Đợt Đăng ký Kế hoạch học tập học kỳ {target_term} đã kết thúc "
+        f"(hiện đang ở giai đoạn: {phase_info['phase_label']}). "
         "Danh sách được khóa ở chế độ chỉ xem; vui lòng đăng ký lớp cho các môn đã mở lớp."
     )
 
     return {
         "term": target_term,
-        "is_editable": settings.study_plan_editable,
+        "is_editable": is_editable,
         "phase_message": phase_message,
         "total_planned_credits": sum(i["credits"] for i in items),
         "max_credits": student.max_credits,
@@ -188,9 +181,9 @@ async def add_course_to_study_plan(
     course_id: int,
     term: str | None = None,
 ) -> dict:
-    _ensure_study_plan_open()
     settings = get_settings()
     target_term = term or settings.study_plan_term
+    await assert_study_plan_open(session, term=target_term)
 
     student = await session.get(Student, student_id)
     if student is None:
@@ -281,7 +274,7 @@ async def add_course_to_study_plan(
 async def remove_course_from_study_plan(
     session: AsyncSession, student_id: int, plan_id: int
 ) -> dict:
-    _ensure_study_plan_open()
+    await assert_study_plan_open(session)
     sp = await session.get(StudyPlan, plan_id)
     if sp is None or sp.student_id != student_id:
         raise api_error(404, "NOT_FOUND", "Không tìm thấy mục Kế hoạch học tập")
@@ -377,10 +370,11 @@ async def get_admin_study_plan_summary(
         )
 
     items.sort(key=lambda x: (-x["planned_count"], x["code"]))
+    phase_info = await get_registration_phase(session, term=target_term)
 
     return {
         "term": target_term,
-        "is_editable": settings.study_plan_editable,
+        "is_editable": bool(phase_info["can_edit_study_plan"]),
         "min_required": settings.min_plan_students_to_open,
         "total_plans": total_plans,
         "opened_courses": opened_courses,
@@ -422,13 +416,32 @@ async def finalize_study_plan_openings(
     for cid, sec in existing_sec_rows:
         existing_sections_by_cid.setdefault(cid, set()).add(sec)
 
+    active_enrolled_cids = set(
+        (
+            await session.scalars(
+                select(CourseOffering.course_id)
+                .join(Enrollment, Enrollment.offering_id == CourseOffering.id)
+                .where(
+                    CourseOffering.term == target_term,
+                    Enrollment.status == "ACTIVE",
+                )
+                .distinct()
+            )
+        ).all()
+    )
+
     opened = 0
     not_opened = 0
     created_offerings = 0
 
     for idx, c in enumerate(courses):
         planned = live_counts.get(c.id, 0)
-        status = "OPENED" if planned >= threshold else "NOT_OPENED"
+        # Không đóng môn đã có sinh viên đăng ký ACTIVE trong kỳ để bảo toàn toàn vẹn dữ liệu
+        status = (
+            "OPENED"
+            if (planned >= threshold or c.id in active_enrolled_cids)
+            else "NOT_OPENED"
+        )
         opening = await session.get(TermCourseOpening, (target_term, c.id))
         if opening is None:
             opening = TermCourseOpening(

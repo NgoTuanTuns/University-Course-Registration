@@ -5,7 +5,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_session
 from app.core.security import CurrentUser, require_role
-from app.schemas.enrollment import EnrollmentResult, EnrollRequest
+from app.schemas.enrollment import (
+    EnrollmentResult,
+    EnrollRequest,
+    SwapRequest,
+    SwapResult,
+)
 from app.services import enrollment_service
 
 router = APIRouter(prefix="/enroll", tags=["enrollment"])
@@ -31,6 +36,27 @@ async def enroll(
     )
     response.status_code = 200 if result["status"] == "WAITLISTED" else 201
     return result
+
+
+@router.post(
+    "/swap",
+    response_model=SwapResult,
+    status_code=200,
+    description="Đổi lớp học phần nguyên tử (Atomic Section Swap) trong cùng 1 transaction.",
+)
+async def swap(
+    payload: SwapRequest,
+    session: Session,
+    user: User,
+    idempotency_key: Annotated[str | None, Header(min_length=1, max_length=128)] = None,
+) -> dict:
+    return await enrollment_service.swap_section(
+        session,
+        user.id,
+        payload.from_enrollment_id,
+        payload.to_offering_id,
+        idempotency_key,
+    )
 
 
 @router.delete(

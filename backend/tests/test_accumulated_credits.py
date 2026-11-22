@@ -96,6 +96,38 @@ async def test_ensure_eligible_allows_freshman_for_zero_min_credit_course(monkey
     await ensure_eligible(session, student, offering)  # type: ignore[arg-type]
 
 
+@pytest.mark.asyncio
+async def test_ensure_eligible_blocks_cross_faculty_enrollment(monkeypatch):
+    from app.core.faculty import FACULTY_CNTT
+
+    session = AsyncMock()
+    session.get = AsyncMock(return_value=None)
+
+    exec_result = MagicMock()
+    exec_result.one_or_none.return_value = (3, 0, "MAN101")
+    session.execute = AsyncMock(return_value=exec_result)
+
+    monkeypatch.setattr(
+        "app.services.enrollment_service.active_items",
+        AsyncMock(return_value=[]),
+    )
+
+    student = SimpleNamespace(
+        id=587,
+        role="student",
+        faculty=FACULTY_CNTT,
+        max_credits=25,
+        accumulated_credits=57,
+    )
+    offering = SimpleNamespace(id=99, course_id=99, term="2026-2", schedule=[])
+
+    with pytest.raises(HTTPException) as exc_info:
+        await ensure_eligible(session, student, offering)  # type: ignore[arg-type]
+
+    assert exc_info.value.status_code == 422
+    assert exc_info.value.detail["code"] == "FACULTY_MISMATCH"
+
+
 def test_faculty_isolation_for_cntt_students():
     from app.core.faculty import FACULTY_CNTT, course_allowed_for_faculty
 

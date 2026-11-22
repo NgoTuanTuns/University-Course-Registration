@@ -11,6 +11,7 @@ from app.core.config import get_settings
 from app.core.errors import api_error
 from app.models import Course, CourseOffering, Student, Waitlist
 from app.services.enrollment_queries import offering_dict
+from app.services.phase_service import assert_enrollment_open
 
 
 async def queue_rows(session: AsyncSession, offering_id: int) -> list[Waitlist]:
@@ -108,7 +109,8 @@ async def leave(session: AsyncSession, student_id: int, waitlist_id: int) -> dic
         if row is None:
             raise api_error(404, "NOT_FOUND", "Không tìm thấy hàng chờ")
         offering_id = row.offering_id
-        await get_offering(session, offering_id, lock=True)
+        offering = await get_offering(session, offering_id, lock=True)
+        await assert_enrollment_open(session, term=offering.term)
         await session.delete(row)
         await session.flush()
         await reindex(session, offering_id)

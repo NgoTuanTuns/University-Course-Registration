@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.errors import api_error
+from app.core.faculty import course_allowed_for_faculty
 from app.core.redis import get_redis
 from app.models import (
     CompletedCourse,
@@ -25,6 +26,7 @@ from app.models import (
 )
 from app.services.enrollment_lock import acquire_offering_lock
 from app.services.enrollment_queries import active_items
+from app.services.phase_service import assert_enrollment_open
 from app.services.prerequisite_engine import check_eligibility
 from app.services.schedule_conflict import find_schedule_conflicts
 
@@ -74,13 +76,26 @@ async def ensure_eligible(
         )
     course_row = (
         await session.execute(
-            select(Course.credits, Course.min_accumulated_credits).where(
+            select(Course.credits, Course.min_accumulated_credits, Course.code).where(
                 Course.id == offering.course_id
             )
         )
     ).one_or_none()
     credits = int(course_row[0]) if course_row else 0
     min_acc_credits = int(course_row[1]) if course_row else 0
+    course_code = str(course_row[2]) if course_row and len(course_row) > 2 else ""
+    student_faculty = getattr(student, "faculty", None)
+    if (
+        getattr(student, "role", "student") == "student"
+        and student_faculty
+        and course_code
+        and not course_allowed_for_faculty(course_code, student_faculty)
+    ):
+        raise api_error(
+            422,
+            "FACULTY_MISMATCH",
+            f"Học phần {course_code} không thuộc chương trình đào tạo của {student_faculty}.",
+        )
     student_acc = int(getattr(student, "accumulated_credits", 0) or 0)
     if min_acc_credits > 0 and student_acc < min_acc_credits:
         raise api_error(
@@ -300,6 +315,7 @@ async def enroll(
                 )
             return {k: v for k, v in cached.items() if k != "_committed"}
         item = await get_offering(session, offering_id)
+        await assert_enrollment_open(session, term=item.term)
         eligibility_fields = (
             item.course_id,
             item.term,
@@ -357,7 +373,8 @@ async def cancel(
         ids = {student_id} | {w.student_id for w in queue}
         students = await lock_students(session, ids)
         # All affected students are locked in ascending order BEFORE the offering.
-        await get_offering(session, offering_id, lock=True)
+        offering = await get_offering(session, offering_id, lock=True)
+        await assert_enrollment_open(session, term=offering.term)
         queue = await queue_rows(session, offering_id)
         if any(w.student_id not in ids for w in queue):
             raise QueueChanged()
@@ -401,4 +418,221 @@ async def cancel(
     promotion = result.pop("_promotion", None)
     if promotion:
         logging.getLogger(__name__).info(json.dumps(promotion))
+    return result
+
+
+async def swap_section(
+    session: AsyncSession,
+    student_id: int,
+    from_enrollment_id: int,
+    to_offering_id: int,
+    idempotency_key: str | None = None,
+) -> dict:
+    """Đổi lớp học phần nguyên tử (Atomic Section Swap).
+
+    Khóa sinh viên theo thứ tự ID tăng dần trước, sau đó khóa 2 CourseOffering theo
+    thứ tự ID tăng dần để đảm bảo tuyệt đối không deadlock khi đổi chéo đồng thời.
+    """
+    from app.services.waitlist_service import promote_next, queue_rows, reindex
+
+    key = f"idem:swap:{student_id}:{idempotency_key}" if idempotency_key else None
+
+    async def operation() -> dict:
+        enrollment = await session.scalar(
+            select(Enrollment)
+            .where(
+                Enrollment.id == from_enrollment_id,
+                Enrollment.student_id == student_id,
+            )
+            .execution_options(populate_existing=True)
+        )
+        if enrollment is None:
+            raise api_error(404, "NOT_FOUND", "Không tìm thấy đăng ký hiện tại")
+        if enrollment.status != "ACTIVE":
+            raise api_error(
+                409,
+                "ENROLLMENT_NOT_ACTIVE",
+                "Chỉ có thể đổi lớp đối với học phần đang ở trạng thái ACTIVE",
+            )
+
+        from_offering_id = enrollment.offering_id
+        if from_offering_id == to_offering_id:
+            raise api_error(
+                422,
+                "SAME_SECTION",
+                "Bạn đang đăng ký chính lớp học phần này",
+            )
+
+        queue = await queue_rows(session, from_offering_id)
+        ids = {student_id} | {w.student_id for w in queue}
+        students = await lock_students(session, ids)
+        if student_id not in students:
+            raise api_error(404, "NOT_FOUND", "Không tìm thấy sinh viên")
+
+        cached = await cached_result(key)
+        if cached and cached.get("_committed"):
+            if (
+                cached.get("from_enrollment_id") != from_enrollment_id
+                or cached.get("to_offering_id") != to_offering_id
+            ):
+                raise api_error(
+                    409,
+                    "IDEMPOTENCY_KEY_REUSED",
+                    "Idempotency-Key đã được dùng cho yêu cầu đổi lớp khác",
+                )
+            return {k: v for k, v in cached.items() if k != "_committed"}
+
+        # Khóa đồng thời 2 lớp học phần theo thứ tự ID tăng dần để tránh deadlock
+        locked_offerings = {
+            row.id: row
+            for row in (
+                await session.scalars(
+                    select(CourseOffering)
+                    .where(CourseOffering.id.in_([from_offering_id, to_offering_id]))
+                    .order_by(CourseOffering.id)
+                    .with_for_update()
+                    .execution_options(populate_existing=True)
+                )
+            ).all()
+        }
+        from_offering = locked_offerings.get(from_offering_id)
+        to_offering = locked_offerings.get(to_offering_id)
+        if from_offering is None or to_offering is None:
+            raise api_error(404, "NOT_FOUND", "Không tìm thấy lớp học phần đích")
+
+        await assert_enrollment_open(session, term=to_offering.term)
+
+        if from_offering.course_id != to_offering.course_id:
+            raise api_error(
+                422,
+                "DIFFERENT_COURSE",
+                "Chỉ được phép đổi giữa các lớp thuộc cùng một học phần",
+            )
+        if from_offering.term != to_offering.term:
+            raise api_error(
+                422,
+                "DIFFERENT_TERM",
+                "Chỉ được phép đổi sang lớp học phần thuộc cùng học kỳ",
+            )
+
+        opening = await session.get(
+            TermCourseOpening, (to_offering.term, to_offering.course_id)
+        )
+        if opening is not None and getattr(opening, "status", None) == "NOT_OPENED":
+            raise api_error(
+                422,
+                "COURSE_NOT_OPENED",
+                "Học phần này không mở lớp trong học kỳ hiện tại",
+            )
+
+        # Kiểm tra lại hàng chờ của lớp cũ sau khi đã giữ khóa offering
+        queue = await queue_rows(session, from_offering_id)
+        if any(w.student_id not in ids for w in queue):
+            raise QueueChanged()
+
+        await session.refresh(enrollment)
+        if enrollment.status != "ACTIVE":
+            raise api_error(
+                409, "CONCURRENT_UPDATE", "Trạng thái đăng ký lớp cũ vừa thay đổi"
+            )
+
+        if to_offering.enrolled_count >= to_offering.capacity:
+            raise api_error(
+                409,
+                "SECTION_FULL",
+                "Lớp học phần đích đã hết chỗ. Lớp cũ của bạn vẫn được giữ nguyên.",
+            )
+
+        # Kiểm tra trùng lịch với các môn ACTIVE khác (LOẠI TRỪ lớp đang đổi đi)
+        other_active = [
+            item
+            for item in await active_items(session, student_id, to_offering.term)
+            if item["id"] != from_offering_id
+        ]
+        conflicts = find_schedule_conflicts(
+            to_offering.schedule, other_active, get_settings().min_break_minutes
+        )
+        if conflicts:
+            raise api_error(
+                409,
+                "SCHEDULE_CONFLICT",
+                "Lớp đích bị trùng lịch học. Lớp cũ của bạn vẫn được giữ nguyên.",
+                conflicts_with=[
+                    {
+                        "offering_id": i["id"],
+                        "course_code": i["code"],
+                        "section": i["section"],
+                    }
+                    for i in conflicts
+                ],
+            )
+
+        # Thực thi đổi lớp nguyên tử: hủy lớp cũ -> nhả chỗ cũ -> giữ chỗ mới -> tạo đăng ký mới
+        changed = await session.scalar(
+            update(Enrollment)
+            .where(
+                Enrollment.id == from_enrollment_id,
+                Enrollment.version == enrollment.version,
+                Enrollment.status == "ACTIVE",
+            )
+            .values(
+                status="CANCELLED",
+                version=Enrollment.version + 1,
+                cancelled_at=func.now(),
+            )
+            .returning(Enrollment.id)
+        )
+        if changed is None:
+            raise api_error(409, "CONCURRENT_UPDATE", "Phiên bản đăng ký đã thay đổi")
+
+        await session.execute(
+            update(CourseOffering)
+            .where(CourseOffering.id == from_offering_id)
+            .values(enrolled_count=CourseOffering.enrolled_count - 1)
+        )
+
+        if not await reserve_seat(session, to_offering_id):
+            raise api_error(
+                409,
+                "SECTION_FULL",
+                "Lớp học phần đích vừa hết chỗ. Lớp cũ của bạn vẫn được giữ nguyên.",
+            )
+
+        new_enr = await create_enrollment(session, student_id, to_offering_id)
+
+        # Nếu sinh viên từng nằm trong Waitlist của chính lớp đích thì tự dọn sạch
+        existing_wl = await session.scalar(
+            select(Waitlist).where(
+                Waitlist.student_id == student_id,
+                Waitlist.offering_id == to_offering_id,
+            )
+        )
+        if existing_wl is not None:
+            await session.delete(existing_wl)
+            await session.flush()
+            await reindex(session, to_offering_id)
+
+        # Tự động đôn người đầu hàng chờ của lớp cũ (nếu có)
+        promotion = await promote_next(session, from_offering_id, queue, students)
+
+        payload = {
+            "from_enrollment_id": from_enrollment_id,
+            "new_enrollment_id": new_enr["id"],
+            "from_offering_id": from_offering_id,
+            "to_offering_id": to_offering_id,
+            "status": "SWAPPED",
+            "version": new_enr["version"],
+            "promoted_student_id": (
+                int(promotion["student_id"]) if promotion else None
+            ),
+            "_promotion": promotion,
+        }
+        await cache_result(key, {k: v for k, v in payload.items() if k != "_promotion"})
+        return payload
+
+    result = await run_transaction(session, operation)
+    promotion = result.pop("_promotion", None)
+    if promotion:
+        logging.getLogger(__name__).info(json.dumps(promotion))
+    await cache_result(key, result, committed=True)
     return result

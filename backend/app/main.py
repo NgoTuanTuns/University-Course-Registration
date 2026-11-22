@@ -19,6 +19,8 @@ from app.api.v1 import (
     courses,
     enroll,
     prerequisites,
+    registration_phases,
+    scheduler,
     students,
     study_plans,
     timetable,
@@ -80,6 +82,8 @@ app.include_router(timetable.router, prefix=api_router_prefix)
 app.include_router(waitlist.router, prefix=api_router_prefix)
 app.include_router(students.router, prefix=api_router_prefix)
 app.include_router(study_plans.router, prefix=api_router_prefix)
+app.include_router(registration_phases.router, prefix=api_router_prefix)
+app.include_router(scheduler.router, prefix=api_router_prefix)
 
 
 @app.get("/health", tags=["health"])

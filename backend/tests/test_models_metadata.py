@@ -21,6 +21,7 @@ TABLES = {
     "waitlist",
     "study_plans",
     "term_course_openings",
+    "term_registration_settings",
 }
 
 
