@@ -53,9 +53,7 @@ def upgrade() -> None:
             name="uq_study_plans_student_course_term",
         ),
     )
-    op.create_index(
-        "ix_study_plans_term_course", "study_plans", ["term", "course_id"]
-    )
+    op.create_index("ix_study_plans_term_course", "study_plans", ["term", "course_id"])
 
     op.create_table(
         "term_course_openings",

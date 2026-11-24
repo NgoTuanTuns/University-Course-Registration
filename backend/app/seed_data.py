@@ -495,8 +495,27 @@ def _is_special_shift5_course(code: str) -> bool:
     return code.startswith(("BAS", "ENG")) or code in ("INT451",)
 
 
-def _random_schedule(rng: random.Random, *, allow_shift5: bool = False) -> list[dict]:
-    """1 môn học = 1 ca/tuần, tập trung 4 ca đầu (Ca 1–Ca 4); Ca 5 chỉ cho môn đặc biệt."""
+def _is_two_shift_course(code: str, credits: int) -> bool:
+    """Một số môn nặng/thực hành (4 tín chỉ hoặc môn lập trình cốt lõi) học 2 ca/tuần."""
+    return credits >= 4 or code in (
+        "INT101",
+        "INT131",
+        "INT201",
+        "INT221",
+        "INT222",
+        "MAT208",
+    )
+
+
+def _random_schedule(
+    rng: random.Random, *, allow_shift5: bool = False, sessions: int = 1
+) -> list[dict]:
+    """Sinh lịch theo 5 ca chuẩn TDTU (1 ca/tuần hoặc 2 ca/tuần khác ngày cho môn thực hành/4 TC)."""
+    if sessions >= 2:
+        d1, d2 = sorted(rng.sample(range(1, 7), 2))
+        s1 = rng.choice(MAIN_SHIFTS)
+        s2 = rng.choice(MAIN_SHIFTS)
+        return _sched([(d1, s1[0], s1[1]), (d2, s2[0], s2[1])])
     day = rng.randint(1, 6)  # Thứ Hai - Thứ Bảy
     if allow_shift5 and rng.random() < 0.25:
         slot = SHIFT_5
@@ -862,30 +881,55 @@ def _add_study_plans_and_openings(
             )
         )
 
-    def _snap_to_tdtu_shift(schedule: list[dict]) -> list[dict]:
-        """Chuẩn hóa lịch 1 môn = 1 ca theo khung giờ chuẩn TDTU (Ca 1–Ca 5)."""
-        first = schedule[0]
-        day = first["day"]
-        start_min = _to_min(first["start"])
-        if start_min < 9 * 60 + 25:
-            slot = MAIN_SHIFTS[0]  # Ca 1: 06:50–09:20
-        elif start_min < 12 * 60 + 15:
-            slot = MAIN_SHIFTS[1]  # Ca 2: 09:30–12:00
-        elif start_min < 15 * 60 + 20:
-            slot = MAIN_SHIFTS[2]  # Ca 3: 12:45–15:15
-        elif start_min < 18 * 60:
-            slot = MAIN_SHIFTS[3]  # Ca 4: 15:25–17:55
-        else:
-            slot = SHIFT_5  # Ca 5: 18:05–20:35
-        return [{"day": day, "start": slot[0], "end": slot[1]}]
+    def _snap_to_tdtu_shift(
+        schedule: list[dict], *, want_two_shifts: bool = False
+    ) -> list[dict]:
+        """Chuẩn hóa lịch theo khung giờ chuẩn TDTU (Ca 1–Ca 5), hỗ trợ môn học 2 ca/tuần."""
+        snapped: list[dict] = []
+        seen: set[tuple[int, str]] = set()
+        for item in schedule:
+            day = int(item["day"])
+            start_min = _to_min(item["start"])
+            if start_min < 9 * 60 + 25:
+                slot = MAIN_SHIFTS[0]  # Ca 1: 06:50–09:20
+            elif start_min < 12 * 60 + 15:
+                slot = MAIN_SHIFTS[1]  # Ca 2: 09:30–12:00
+            elif start_min < 15 * 60 + 20:
+                slot = MAIN_SHIFTS[2]  # Ca 3: 12:45–15:15
+            elif start_min < 18 * 60:
+                slot = MAIN_SHIFTS[3]  # Ca 4: 15:25–17:55
+            else:
+                slot = SHIFT_5  # Ca 5: 18:05–20:35
+            key = (day, slot[0])
+            if key not in seen:
+                seen.add(key)
+                snapped.append({"day": day, "start": slot[0], "end": slot[1]})
 
+        if want_two_shifts and len(snapped) == 1:
+            used_day = snapped[0]["day"]
+            other_days = [d for d in range(1, 7) if d != used_day]
+            d2 = rng.choice(other_days)
+            s2 = rng.choice(MAIN_SHIFTS)
+            snapped.append({"day": d2, "start": s2[0], "end": s2[1]})
+            snapped.sort(key=lambda x: (x["day"], x["start"]))
+        return snapped
+
+    credits_by_code = {c.code: c.credits for c in ds.courses}
     filtered_offerings = [
         OfferingRow(
             course_code=o.course_code,
             section=o.section,
             instructor=o.instructor,
             capacity=o.capacity,
-            schedule=_snap_to_tdtu_shift(o.schedule),
+            schedule=_snap_to_tdtu_shift(
+                o.schedule,
+                want_two_shifts=(
+                    o.enrolled_count == 0
+                    and _is_two_shift_course(
+                        o.course_code, credits_by_code.get(o.course_code, 3)
+                    )
+                ),
+            ),
             room=o.room,
             enrolled_count=o.enrolled_count,
             term=term,
@@ -921,7 +965,9 @@ def _add_study_plans_and_openings(
                     instructor=rng.choice(_INSTRUCTORS),
                     capacity=default_cap,
                     schedule=_random_schedule(
-                        rng, allow_shift5=_is_special_shift5_course(c.code)
+                        rng,
+                        allow_shift5=_is_special_shift5_course(c.code),
+                        sessions=2 if _is_two_shift_course(c.code, c.credits) else 1,
                     ),
                     room=f"B{rng.randint(1, 3)}-{rng.randint(101, 512)}",
                     enrolled_count=0,

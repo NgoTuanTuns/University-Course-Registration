@@ -1,16 +1,28 @@
 """Router hồ sơ học tập sinh viên (/students/me/academic-record)."""
 
-from typing import Annotated
+from datetime import datetime
+from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.core.db import get_session
 from app.core.errors import api_error
 from app.core.security import CurrentUser, get_current_user
-from app.models import CompletedCourse, Course, Student
+from app.core.tuition import calculate_tuition_estimate
+from app.models import (
+    CompletedCourse,
+    Course,
+    CourseOffering,
+    Enrollment,
+    Student,
+    StudyPlan,
+    TermCourseOpening,
+)
+from app.services.phase_service import get_registration_phase
 
 router = APIRouter(prefix="/students", tags=["students"])
 
@@ -88,3 +100,209 @@ async def get_my_academic_record(
         completed_count=len(completed_list),
         completed_courses=completed_list,
     )
+
+
+class TuitionItemOut(BaseModel):
+    enrollment_id: int
+    course_code: str
+    course_name: str
+    section: str
+    credits: int
+    category: str
+    unit_price: int
+    lab_fee: int
+    subtotal: int
+
+
+class TuitionEstimateResponse(BaseModel):
+    term: str
+    currency: str
+    status: str
+    payment_deadline: str
+    total_courses: int
+    total_credits: int
+    tuition_subtotal: int
+    lab_fee_total: int
+    total_amount: int
+    items: list[TuitionItemOut]
+
+
+@router.get("/me/tuition", response_model=TuitionEstimateResponse)
+async def get_my_tuition_estimate(
+    session: Annotated[AsyncSession, Depends(get_session)],
+    user: Annotated[CurrentUser, Depends(get_current_user)],
+    term: Annotated[str | None, Query(pattern=r"^\d{4}-[1-3]$")] = None,
+) -> dict:
+    """Tính bảng kê học phí tạm tính theo tín chỉ cho các lớp học phần đang ACTIVE."""
+    target_term = term or get_settings().study_plan_term
+    rows = (
+        await session.execute(
+            select(
+                Enrollment.id,
+                Course.code,
+                Course.name,
+                CourseOffering.section,
+                Course.credits,
+            )
+            .join(CourseOffering, CourseOffering.id == Enrollment.offering_id)
+            .join(Course, Course.id == CourseOffering.course_id)
+            .where(
+                Enrollment.student_id == user.id,
+                Enrollment.status == "ACTIVE",
+                CourseOffering.term == target_term,
+            )
+            .order_by(Course.code, CourseOffering.section)
+        )
+    ).all()
+
+    enrolled_rows = [
+        {
+            "enrollment_id": int(enr_id),
+            "course_code": str(code),
+            "course_name": str(name),
+            "section": str(section),
+            "credits": int(credits),
+        }
+        for enr_id, code, name, section, credits in rows
+    ]
+    return calculate_tuition_estimate(target_term, enrolled_rows)
+
+
+class StudentNotificationOut(BaseModel):
+    id: str
+    kind: Literal[
+        "WAITLIST_PROMOTED",
+        "COURSE_NOT_OPENED",
+        "NEW_SECTIONS_OPENED",
+        "PHASE_UPDATE",
+    ]
+    title: str
+    message: str
+    link: str | None = None
+    created_at: datetime | None = None
+
+
+class StudentNotificationListResponse(BaseModel):
+    items: list[StudentNotificationOut]
+
+
+@router.get("/me/notifications", response_model=StudentNotificationListResponse)
+async def get_my_notifications(
+    session: Annotated[AsyncSession, Depends(get_session)],
+    user: Annotated[CurrentUser, Depends(get_current_user)],
+    term: Annotated[str | None, Query(pattern=r"^\d{4}-[1-3]$")] = None,
+) -> dict:
+    """Tổng hợp thông báo học vụ cá nhân hóa cho sinh viên (hủy mở lớp, mở thêm lớp, pha đợt ĐK)."""
+    target_term = term or get_settings().study_plan_term
+    items: list[dict] = []
+
+    # 1. Các môn trong KHHT không đủ sĩ số nên hủy mở lớp
+    not_opened_rows = (
+        await session.execute(
+            select(
+                Course.code,
+                Course.name,
+                TermCourseOpening.planned_count,
+                TermCourseOpening.min_required,
+                TermCourseOpening.decided_at,
+            )
+            .join(StudyPlan, StudyPlan.course_id == Course.id)
+            .join(
+                TermCourseOpening,
+                (TermCourseOpening.course_id == Course.id)
+                & (TermCourseOpening.term == target_term),
+            )
+            .where(
+                StudyPlan.student_id == user.id,
+                StudyPlan.term == target_term,
+                TermCourseOpening.status == "NOT_OPENED",
+            )
+            .order_by(Course.code)
+        )
+    ).all()
+    not_opened_codes: set[str] = set()
+    for code, name, planned, min_req, decided_at in not_opened_rows:
+        not_opened_codes.add(str(code))
+        items.append(
+            {
+                "id": f"not-opened-{target_term}-{code}",
+                "kind": "COURSE_NOT_OPENED",
+                "title": f"Môn {code} không mở lớp kỳ {target_term}",
+                "message": (
+                    f"{code} — {name} chỉ có {planned}/{min_req} sinh viên ĐKKHHT "
+                    "nên Phòng Đào tạo tạm hủy mở lớp học kỳ này."
+                ),
+                "link": "/study-plan",
+                "created_at": decided_at,
+            }
+        )
+
+    # 2. Các môn trong KHHT đã mở nhiều lớp (>= 2 lớp) mà sinh viên chưa đăng ký
+    enrolled_cids = set(
+        (
+            await session.scalars(
+                select(CourseOffering.course_id)
+                .join(Enrollment, Enrollment.offering_id == CourseOffering.id)
+                .where(
+                    Enrollment.student_id == user.id,
+                    Enrollment.status == "ACTIVE",
+                    CourseOffering.term == target_term,
+                )
+            )
+        ).all()
+    )
+    opened_multi_rows = (
+        await session.execute(
+            select(
+                Course.id,
+                Course.code,
+                Course.name,
+                func.count(CourseOffering.id).label("sec_count"),
+            )
+            .join(StudyPlan, StudyPlan.course_id == Course.id)
+            .join(
+                CourseOffering,
+                (CourseOffering.course_id == Course.id)
+                & (CourseOffering.term == target_term),
+            )
+            .where(
+                StudyPlan.student_id == user.id,
+                StudyPlan.term == target_term,
+            )
+            .group_by(Course.id, Course.code, Course.name)
+            .having(func.count(CourseOffering.id) >= 2)
+            .order_by(func.count(CourseOffering.id).desc(), Course.code)
+            .limit(4)
+        )
+    ).all()
+    for cid, code, name, sec_count in opened_multi_rows:
+        if cid in enrolled_cids or str(code) in not_opened_codes:
+            continue
+        items.append(
+            {
+                "id": f"multi-open-{target_term}-{code}-{sec_count}",
+                "kind": "NEW_SECTIONS_OPENED",
+                "title": f"{code} đã mở {sec_count} lớp học phần",
+                "message": (
+                    f"Học phần {code} — {name} trong KHHT của bạn đã được mở {sec_count} lớp. "
+                    "Hãy chọn ca học phù hợp trước khi đầy chỗ."
+                ),
+                "link": f"/courses?q={code}",
+                "created_at": None,
+            }
+        )
+
+    # 3. Thông báo trạng thái giai đoạn đợt đăng ký hiện tại
+    phase_info = await get_registration_phase(session, term=target_term)
+    items.append(
+        {
+            "id": f"phase-{target_term}-{phase_info['phase']}",
+            "kind": "PHASE_UPDATE",
+            "title": f"Trạng thái đợt đăng ký: {phase_info['phase_label']}",
+            "message": phase_info["note"] or phase_info["phase_description"],
+            "link": "/courses" if phase_info["can_enroll"] else "/study-plan",
+            "created_at": phase_info["updated_at"],
+        }
+    )
+
+    return {"items": items}

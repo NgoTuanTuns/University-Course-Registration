@@ -58,3 +58,14 @@ def test_build_phase_payload_includes_deadline_and_flags():
     assert payload["can_enroll"] is True
     assert payload["phase_ends_at"] == ends
     assert payload["note"] == "Mở đăng ký chính thức"
+
+
+def test_expired_phase_deadline_automatically_locks_actions():
+    past = datetime.now(UTC) - timedelta(minutes=5)
+    enr_payload = build_phase_payload("2026-2", "ENROLLMENT_OPEN", phase_ends_at=past)
+    assert enr_payload["can_enroll"] is False
+    assert enr_payload["can_edit_study_plan"] is False
+
+    sp_payload = build_phase_payload("2026-2", "STUDY_PLAN_OPEN", phase_ends_at=past)
+    assert sp_payload["can_edit_study_plan"] is False
+    assert sp_payload["can_enroll"] is False

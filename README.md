@@ -1,212 +1,164 @@
-# UniFlow — Hệ thống Đăng ký Học phần & Kiểm tra Điều kiện Tiên quyết
+# UniFlow — Hệ thống Đăng ký Học phần & Điều hành Đào tạo
 
-Dự án bài tập lớn môn **Công nghệ Phần mềm**. Hệ thống quản lý đăng ký môn học và giải trình điều kiện tiên quyết cho sinh viên đại học, hỗ trợ giải quyết tranh chấp đồng thời khi số lượng đăng ký lớn.
-
----
-
-## 👥 Thành viên nhóm & Phân công vai trò (M1 – M5)
-
-| Vai trò | Phụ trách chính | Nhiệm vụ trọng tâm |
-| :--- | :--- | :--- |
-| **M1** | Frontend Web Developer | Giao diện React 18 + TS + TailwindCSS, quản lý phiên đăng nhập JWT, tra cứu môn học, biểu đồ giải trình tiên quyết, quản trị viên Admin. |
-| **M2** | Prerequisites Engine | Thuật toán đồ thị có hướng phi chu trình (DAG), phát hiện chu trình, giải trình điều kiện tiên quyết, bộ đệm Redis cache, benchmark. |
-| **M3** | Enrollment & Registration | Nghiệp vụ đăng ký học phần, hủy môn, kiểm tra trùng lịch học, danh sách chờ (Waitlist FIFO), xử lý tranh chấp concurrency. |
-| **M4** | Database & Security | Thiết kế 7 bảng dữ liệu SQLAlchemy, Alembic migrations, nạp 1.000+ sinh viên mẫu, xác thực JWT (Token Rotation), RBAC, API Admin. |
-| **M5** | DevOps & QA Lead | Docker Compose, Nginx Reverse Proxy, CI GitHub Actions, bộ kiểm định toàn vẹn (Invariants I1–I10), OpenAPI Snapshot, Locust loadtest. |
+Dự án bài tập lớn môn **Công nghệ Phần mềm**. **UniFlow** là hệ thống đăng ký học phần trực tuyến mô phỏng quy trình đào tạo tín chỉ theo mô hình Đại học Tôn Đức Thắng (TDTU) cho **Học kỳ 2026-2** (cuối 12/2026 – cuối 05/2027), tập trung vào tính toàn vẹn dữ liệu dưới tải đồng thời cao, kiểm tra điều kiện tiên quyết theo đồ thị DAG và trải nghiệm sắp xếp thời khóa biểu chuẩn 5 ca học.
 
 ---
 
-## 🛠️ Công nghệ sử dụng
+## 1. Kiến trúc & Công nghệ sử dụng
 
-- **Frontend:** React 18, TypeScript, Tailwind CSS, Lucide Icons, Vite 6, Vitest.
+- **Frontend:** React 18, TypeScript, Vite 6, React Router, Lucide Icons, Vitest, ESLint, Prettier.
 - **Backend:** Python 3.11, FastAPI (async/await), Pydantic v2, Uvicorn.
-- **Cơ sở dữ liệu:** PostgreSQL 15, SQLAlchemy 2.0 (AsyncPG), Alembic migrations.
-- **Bộ đệm & Khóa:** Redis 7 (Alpine).
-- **Kiểm thử & Đảm bảo chất lượng:** Pytest, Vitest, Ruff, ESLint, Prettier, OpenAPI Contract Snapshot.
-- **Triển khai & Vận hành:** Docker Compose, Docker Multi-stage Builds, Nginx.
+- **Cơ sở dữ liệu:** PostgreSQL 15, SQLAlchemy 2.0 (AsyncPG), Alembic Migrations (10 bảng dữ liệu, head `0005_add_registration_phases`).
+- **Bộ đệm & Điều phối khóa:** Redis 7 (cache đồ thị DAG tiên quyết, idempotency key, rate limiting, lock gate).
+- **Hạ tầng & Kiểm thử:** Docker Compose, Nginx Reverse Proxy, Pytest (unit, integration, concurrency), Locust Loadtest, OpenAPI Contract Snapshot, GitHub Actions CI.
 
 ---
 
-## 🚀 Hướng dẫn cài đặt và Khởi chạy
+## 2. Phân công nhóm (M1 – M5)
 
-### Yêu cầu tiên quyết
-- **Docker Desktop** (khuyến nghị cho mọi thành viên).
-- **Git** và **VS Code**.
-- *(Tùy chọn khi phát triển local)*: Python 3.11+ và Node.js 20+.
+| Vai trò | Phụ trách chính | Phạm vi công việc |
+| :--- | :--- | :--- |
+| **M1** | Frontend Web | Giao diện người dùng, xác thực JWT, tra cứu & bộ lọc nhanh, xem trước TKB, sơ đồ DAG, trung tâm thông báo, xuất `.ics`, không gian Admin. |
+| **M2** | Prerequisites Engine | Đồ thị có hướng phi chu trình (DAG), kiểm tra điều kiện AND/OR, phát hiện chu trình, giải trình điều kiện thiếu, Redis cache. |
+| **M3** | Enrollment & Scheduler | Đăng ký/hủy học phần, đổi lớp nguyên tử chống deadlock, hàng chờ FIFO tự đôn chỗ, gợi ý xếp lịch tự động (MRV Backtracking). |
+| **M4** | Database & Security | Mô hình 10 bảng SQLAlchemy, Alembic migrations, sinh dữ liệu mẫu 1.001 tài khoản, JWT Token Rotation, RBAC, phân quyền theo khoa. |
+| **M5** | DevOps & QA | Docker Compose, Nginx, GitHub Actions CI, bộ kiểm định bất biến dữ liệu (Invariants), OpenAPI Snapshot, kịch bản kiểm tải Locust. |
 
 ---
 
-### Cách 1: Khởi chạy toàn bộ bằng Docker Compose (Khuyên dùng khi chấm bài / Demo)
+## 3. Tính năng chính
 
-1. **Chuẩn bị file cấu hình:**
+### Cổng Sinh viên
+- **Kế hoạch học tập (ĐKKHHT):** Xem danh sách môn dự kiến kỳ `2026-2`, theo dõi sĩ số nhu cầu mở lớp (`>= 15 SV` mới mở lớp) và tự động khóa ở chế độ chỉ xem sau khi kết thúc đợt ĐKKHHT.
+- **Tra cứu & Đăng ký học phần:** Tự động lọc theo khoa, ưu tiên môn trong KHHT và đúng tiến độ năm học; hỗ trợ **Bộ lọc nhanh** (`Chỉ môn trong KHHT`, `Ẩn lớp trùng lịch hiện tại`, `Chỉ lớp còn chỗ`, `Đủ điều kiện`), tô xám lớp đã đăng ký và mở pop-up **Xem trước thời khóa biểu** độ tương phản cao (Đã đăng ký / Xem trước / Trùng lịch).
+- **Thời khóa biểu chuẩn 5 ca TDTU & Xuất lịch `.ics`:** Hỗ trợ môn 1 ca/tuần và môn thực hành/cốt lõi 2 ca/tuần (Ca 1–Ca 4 chính, Ca 5 buổi tối cho môn đặc biệt); xuất file `.ics` (RFC 5545, múi giờ `Asia/Ho_Chi_Minh`) để nhập trực tiếp vào Google Calendar / Apple Calendar.
+- **Đổi lớp học phần an toàn (Atomic Section Swap):** Chuyển giữa các lớp cùng học phần trong 1 transaction PostgreSQL khóa theo thứ tự ID tăng dần (chống deadlock, giữ nguyên lớp cũ nếu lớp đích đầy hoặc trùng lịch, tự động đôn hàng chờ lớp cũ).
+- **Gợi ý xếp lịch tự động (Smart Auto-Scheduler):** Dùng thuật toán MRV Backtracking kết hợp chấm điểm đa tiêu chí (tránh Ca 1, tránh Ca 5, nghỉ Thứ 7, dồn ít ngày đi học nhất, ưu tiên buổi sáng/chiều) trả về Top 3 phương án không trùng ca và cho phép đăng ký hàng loạt.
+- **Danh sách chờ (Waitlist FIFO) & Trung tâm thông báo:** Tự động ghi danh hàng chờ khi lớp đầy, hỗ trợ hủy chờ ở mọi màn hình, tự đôn chỗ theo thứ tự thời gian và phát thông báo tại biểu tượng chuông trên thanh tiêu đề (đôn lớp, hủy mở lớp, mở thêm lớp, trạng thái đợt ĐK).
+- **Học phí tạm tính theo tín chỉ:** Tính tự động học phí kỳ `2026-2` theo nhóm học phần và phụ phí phòng máy, đồng bộ tức thì theo thao tác đăng ký/đổi/hủy lớp và hỗ trợ in phiếu tạm tính.
+- **Sơ đồ điều kiện tiên quyết (DAG) & Hồ sơ học tập:** Biểu đồ tương tác hiển thị điều kiện AND/OR, tiến độ tích lũy và bảng điểm GPA.
+
+### Cổng Quản trị (Phòng Đào tạo)
+- **Điều hành giai đoạn đợt đăng ký (`/admin/phases`):** Chuyển đổi trực tiếp 4 giai đoạn (`Đợt ĐKKHHT` → `Chốt mở lớp` → `Đợt ĐKMH chính thức` → `Đã khóa sổ học kỳ`), cấu hình thời hạn đếm ngược và tự động khóa thao tác khi quá hạn.
+- **Tổng hợp nhu cầu & Chốt mở nhiều lớp (`/admin/study-plans`):** Theo dõi số SV ĐKKHHT từng môn và tự động mở nhiều lớp (`ceil(nhu_cầu / 40)`) cho các môn đạt ngưỡng.
+- **Quản trị học phần, Tiên quyết & Sĩ số lớp mở:** CRUD học phần, cập nhật cạnh tiên quyết kèm chặn chu trình DAG, và công cụ **Làm đầy sĩ số / Giải phóng 1 chỗ** trên `/courses` (bảo toàn bất biến dữ liệu `I1–I9`) để kiểm thử đầy lớp và tự đôn Waitlist.
+
+---
+
+## 4. Hướng dẫn cài đặt và Khởi chạy
+
+### Yêu cầu hệ thống
+- Docker Desktop (khuyến nghị khi demo và chấm bài).
+- *(Tùy chọn cho phát triển cục bộ)*: Python 3.11+ và Node.js 20+.
+
+### Cách 1: Khởi chạy trọn bộ bằng Docker Compose (Khuyên dùng)
+
+1. Tạo file biến môi trường từ mẫu (nếu chưa có):
    ```powershell
-   # Tạo file .env từ mẫu (nếu chưa có)
    copy .env.example .env
    ```
 
-2. **Dựng và khởi chạy các container:**
+2. Khởi chạy toàn bộ dịch vụ (`nginx`, `web`, `api`, `db`, `redis`):
    ```powershell
-   docker compose up --build
+   docker compose up --build -d
    ```
 
-3. **Mở một terminal mới để áp dụng migration và nạp dữ liệu mẫu:**
+3. Chạy migration và nạp dữ liệu mẫu kỳ `2026-2`:
    ```powershell
-   # Chạy migration tạo 7 bảng
    docker compose exec api alembic upgrade head
-
-   # Nạp dữ liệu mẫu (1.001 sinh viên, 200 môn học, 357 lớp mở)
    docker compose exec api python -m app.seed --reset
    ```
 
-4. **Truy cập ứng dụng:**
-   - **Cổng Nginx (truy cập chính):** <http://localhost:8080>
-   - **Giao diện Web trực tiếp (Vite):** <http://localhost:5173>
-   - **Tài liệu API Swagger UI:** <http://localhost:8000/docs>
+4. Truy cập hệ thống:
+   - **Ứng dụng Web (qua Nginx):** <http://localhost:8080>
+   - **Frontend Vite trực tiếp:** <http://localhost:5173>
+   - **Swagger API Docs:** <http://localhost:8000/docs>
 
-> Profile baseline tải có database/Redis riêng và script reset an toàn; xem [`loadtest/README.md`](loadtest/README.md). Không dùng lệnh seed `--reset` ở trên cho môi trường tải.
+> Môi trường loadtest dùng database/Redis tách biệt; xem chi tiết tại [`loadtest/README.md`](loadtest/README.md).
 
----
+### Cách 2: Chạy phát triển cục bộ (Hybrid)
 
-### Cách 2: Chế độ phát triển cục bộ Hybrid (Khuyên dùng khi lập trình trên Windows)
-
-Chế độ này tận dụng PostgreSQL & Redis trong Docker, đồng thời chạy Backend & Frontend trực tiếp trên máy để hỗ trợ Hot Reload mượt mà nhất.
-
-1. **Bật hạ tầng cơ sở dữ liệu & Cache:**
+1. Khởi động PostgreSQL (`5433`) và Redis (`6380`):
    ```powershell
    docker compose up -d db redis
    ```
-   *(PostgreSQL lắng nghe tại host cổng `5433`, Redis tại cổng `6380` nhằm tránh đụng độ cổng dịch vụ hệ thống).*
 
-2. **Khởi chạy Backend:**
+2. Chạy Backend:
    ```powershell
    cd backend
    $env:PYTHONPATH="."
-   # Áp dụng migration và seed nếu lần đầu chạy
    ..\.venv\Scripts\alembic upgrade head
    ..\.venv\Scripts\python -m app.seed --reset
-
-   # Chạy Uvicorn dev server
    ..\.venv\Scripts\python -m uvicorn app.main:app --reload --port 8000
    ```
 
-3. **Khởi chạy Frontend (ở một terminal khác tại thư mục gốc):**
+3. Chạy Frontend (terminal khác tại thư mục gốc):
    ```powershell
    npm install
    npm run dev
    ```
-   *Truy cập:* <http://localhost:5173>
 
 ---
 
-## 🔑 Tài khoản thử nghiệm (Seed Data)
+## 5. Tài khoản thử nghiệm (Seed Data)
 
-Hệ thống đã nạp sẵn dữ liệu chuẩn để kiểm thử các luồng phân quyền (RBAC):
-
-| Vai trò | Email đăng nhập | Mật khẩu | Quyền hạn |
+| Vai trò | Email đăng nhập | Mật khẩu | Hồ sơ mẫu |
 | :--- | :--- | :--- | :--- |
-| **Sinh viên** | `sv0001@uni.edu.vn` | `Student@123` | Tra cứu môn học, xem cây điều kiện tiên quyết, đăng ký môn |
-| **Quản trị viên** | `admin@uni.edu.vn` | `Admin@123` | Toàn quyền Quản lý Học phần (CRUD Courses), xem trạng thái sinh viên |
+| **Sinh viên Năm 3 (CNTT)** | `sv0587@uni.edu.vn` | `Student@123` | Khoa Công nghệ thông tin, 57 TC tích lũy, có sẵn KHHT gồm cả môn mở lớp và môn không mở lớp |
+| **Tân sinh viên Năm 1 (CNTT)** | `sv0055@uni.edu.vn` | `Student@123` | Khoa Công nghệ thông tin, 0 TC tích lũy |
+| **Quản trị viên (Admin)** | `admin@uni.edu.vn` | `Admin@123` | Toàn quyền điều hành đợt ĐK, chốt mở lớp, quản trị học phần, tiên quyết và sĩ số lớp |
 
-*(Bạn cũng có thể đăng nhập bằng các mã sinh viên từ `sv0002@uni.edu.vn` đến `sv1000@uni.edu.vn` với cùng mật khẩu `Student@123`).*
+*(Các tài khoản từ `sv0001@uni.edu.vn` đến `sv1000@uni.edu.vn` đều dùng chung mật khẩu `Student@123`).*
 
 ---
 
-## 🧪 Kiểm định chất lượng & Bộ Test tự động (Quality Gates)
+## 6. Kiểm thử & Cổng đảm bảo chất lượng (Quality Gates)
 
-Dự án áp dụng tiêu chuẩn kiểm thử khắt khe được tự động hóa qua GitHub Actions CI.
-
-### 1. Kiểm thử Frontend (M1)
-Chạy tại thư mục gốc:
+### Backend (371 tests: 250 unit + 121 integration & concurrency)
 ```powershell
-npm run lint                  # Kiểm tra quy chuẩn mã nguồn với ESLint
-npm exec prettier -- --check .# Kiểm tra định dạng code với Prettier
-npm test                      # Chạy 11/11 bài kiểm thử xung đột lịch với Vitest
-npm run build                 # Kiểm tra biên dịch TypeScript và đóng gói Vite
+# Lint & Format
+cd backend
+..\.venv\Scripts\ruff check --config pyproject.toml app tests ../loadtest/locustfile.py
+..\.venv\Scripts\ruff format --check --config pyproject.toml app tests alembic ../loadtest/locustfile.py
+
+# Kiểm tra OpenAPI Contract Snapshot
+docker compose exec -T api python -m app.tools.openapi_snapshot --check
+
+# Chạy toàn bộ test tích hợp & đồng thời trên PostgreSQL + Redis
+docker compose exec -T api pytest -q
+
+# Kiểm định bất biến dữ liệu (0 vi phạm)
+docker compose exec -T api python -m app.tools.invariants
 ```
 
-### 2. Kiểm thử Backend (M2, M4, M5)
-Chạy tại thư mục `backend/` (hoặc qua `docker compose exec api ...`):
+### Frontend (22 Vitest tests + TypeScript + ESLint + Prettier + Build)
 ```powershell
-# 1. Kiểm tra linter và định dạng mã nguồn Python
-ruff check app tests
-ruff format --check app tests
-
-# 2. Kiểm tra tính khớp hợp đồng API với Frontend
-python -m app.tools.openapi_snapshot --check
-
-# 3. Kiểm tra tính toàn vẹn cơ sở dữ liệu (Invariants I1-I10)
-python -m app.tools.invariants
-
-# 4. Chạy Unit test độc lập (không cần DB, chạy cực nhanh)
-$env:UNIT_TESTS_ONLY="1"; pytest -m unit
-
-# 5. Chạy Integration & Concurrency test (yêu cầu PostgreSQL test)
-pytest -m "integration or concurrency"
+npx prettier --check "src/**/*.{ts,tsx,css}" index.html
+npx tsc --noEmit
+npm run lint
+npm test -- --run
+npm run build
 ```
 
 ---
 
-## 📂 Cấu trúc thư mục dự án
+## 7. Cấu trúc thư mục chính
 
 ```text
-cuoiki/
-├── .github/workflows/       # Kịch bản CI/CD GitHub Actions
-├── backend/                 # Mã nguồn Backend FastAPI
-│   ├── alembic/             # Lịch sử và kịch bản nâng cấp DB migrations
+.
+├── backend/
+│   ├── alembic/versions/    # Migration 0001 -> 0005 (10 bảng)
 │   ├── app/
-│   │   ├── api/v1/          # Endpoints: auth, admin, prerequisites, enroll...
-│   │   ├── core/            # Cấu hình config, DB session, Redis, JWT tokens, RBAC
-│   │   ├── models/          # 7 bảng cơ sở dữ liệu SQLAlchemy (Course, Student,...)
-│   │   ├── schemas/         # Mô hình dữ liệu Pydantic Request/Response
-│   │   ├── services/        # Nghiệp vụ: prerequisite_engine, course_service,...
-│   │   ├── tools/           # Công cụ: invariants.py, openapi_snapshot.py
-│   │   ├── main.py          # FastAPI application entrypoint
-│   │   ├── seed.py          # Script nạp dữ liệu mẫu CLI
-│   │   └── seed_data.py     # Bộ sinh dữ liệu mẫu bảo đảm DAG không chu trình
-│   ├── tests/               # 246+ bài kiểm thử tự động (Unit, Integration)
-│   └── pyproject.toml       # Cấu hình Pytest, Coverage và Ruff
-├── ban_giao/                # Biên bản bàn giao công việc hàng tuần của từng thành viên
-│   ├── Tuan1/
-│   ├── Tuan2/
-│   └── Tuan3/
-├── chitietcongviec/         # Kế hoạch chi tiết 7 tuần và Quy ước nhóm
-├── docs/                    # Tài liệu đặc tả kỹ thuật, sơ đồ, OpenAPI contract
-├── nginx/                   # Cấu hình Nginx Reverse Proxy
-├── public/                  # Static assets & MSW mock service worker
-├── src/                     # Mã nguồn Frontend React 18 + TypeScript
-│   ├── api/                 # Axios HTTP client, token rotation, API modules
-│   ├── components/          # UI Components dùng chung (Header, Sidebar, Modal,...)
-│   ├── features/            # Tính năng: auth, courses, prerequisites, timetable
-│   ├── types/               # TypeScript interfaces & types
-│   ├── App.tsx              # Root component & Routing
-│   └── main.tsx             # Frontend entrypoint
-├── docker-compose.yml       # Điều phối container (Nginx, Web, API, DB, Redis)
-├── Dockerfile               # Multi-stage Dockerfile cho Backend
-├── Dockerfile.web           # Multi-stage Dockerfile cho Frontend
-├── package.json             # Cấu hình phụ thuộc Frontend
-├── vite.config.ts           # Cấu hình Vite dev server & API proxy
-└── README.md                # Tài liệu hướng dẫn dự án
+│   │   ├── api/v1/          # Routers: auth, courses, enroll, waitlist, timetable, study_plans, registration_phases, scheduler, students, admin
+│   │   ├── core/            # config, db, redis, security, tokens, faculty, tuition, rate_limit
+│   │   ├── models/          # SQLAlchemy 2.0 ORM models
+│   │   ├── schemas/         # Pydantic v2 schemas
+│   │   ├── services/        # Business logic: enrollment, swap, waitlist, prerequisite DAG, scheduler, study_plan, phase
+│   │   └── tools/           # invariants, openapi_snapshot, benchmark
+│   └── tests/               # Unit, integration & concurrency test suite
+├── docs/                    # OpenAPI snapshot, thiết kế DB/bảo mật/kiểm thử, test vectors
+├── loadtest/                # Kịch bản Locust & công cụ đo tải
+├── nginx/                   # Cấu hình Reverse Proxy
+├── public/                  # Favicon UniFlow & logo TDTU
+└── src/                     # Ứng dụng React + TypeScript
 ```
-
----
-
-## 📌 Các lệnh quản trị thường dùng
-
-```powershell
-# Xem logs thời gian thực của backend
-docker compose logs -f api
-
-# Tắt toàn bộ hệ thống
-docker compose down
-
-# Xóa toàn bộ container và volume dữ liệu (reset database hoàn toàn)
-docker compose down -v
-```
-
----
-
-## 📜 Quy ước dự án
-
-1. **Bảo mật:** Không bao giờ commit file `.env` hoặc secret keys lên GitHub.
-2. **Quy trình Git:** Không commit trực tiếp vào nhánh `main`. Mọi tính năng tạo nhánh riêng và mở Pull Request có sự thẩm định (review) chéo giữa các thành viên.
-3. **Chi tiết quy ước:** Xem chi tiết tại [QUY_UOC_DU_AN.md](chitietcongviec/QUY_UOC_DU_AN.md).

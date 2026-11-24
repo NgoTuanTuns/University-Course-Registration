@@ -2113,6 +2113,186 @@ tbody tr.row-enrolled .capacity i {
   color: #ffffff;
 }
 
+/* ===== Notification Bell Dropdown ===== */
+.notif-wrap {
+  position: relative;
+}
+.notif-trigger {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  background: transparent;
+  color: var(--text);
+  border: 1px solid transparent;
+}
+.notif-trigger:hover {
+  background: var(--soft);
+  border-color: var(--border);
+  filter: none;
+}
+.notif-dot {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  background: var(--red);
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 16px;
+  text-align: center;
+}
+.notif-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: min(390px, 90vw);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-top: 3px solid var(--accent);
+  box-shadow: 0 16px 40px rgba(0, 35, 71, 0.18);
+  z-index: 40;
+}
+.notif-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.notif-head b {
+  display: block;
+  font-size: 13.5px;
+}
+.notif-head small {
+  font-size: 11.5px;
+}
+.notif-list {
+  max-height: 380px;
+  overflow-y: auto;
+  display: grid;
+}
+.notif-empty {
+  padding: 24px 16px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--muted);
+}
+.notif-item {
+  width: 100%;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  text-align: left;
+  padding: 12px 14px;
+  background: var(--panel);
+  color: var(--text);
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+}
+.notif-item:last-child {
+  border-bottom: 0;
+}
+.notif-item.is-unread {
+  background: var(--soft);
+}
+.notif-item:hover {
+  background: var(--soft);
+  filter: none;
+}
+.notif-icon {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  background: var(--soft);
+  color: var(--accent);
+}
+.notif-item.is-success .notif-icon {
+  background: #ecfdf5;
+  color: #047857;
+}
+.notif-item.is-danger .notif-icon {
+  background: #fdecee;
+  color: #d71920;
+}
+.notif-item.is-info .notif-icon {
+  background: #e8f1fb;
+  color: #004b91;
+}
+.notif-body {
+  flex: 1;
+  min-width: 0;
+}
+.notif-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 3px;
+}
+.notif-title b {
+  font-size: 12.5px;
+  line-height: 1.35;
+}
+.notif-unread-pill {
+  width: 7px;
+  height: 7px;
+  background: var(--red);
+  flex-shrink: 0;
+}
+.notif-body p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+/* ===== Quick Filter Chips (/courses) ===== */
+.quick-filters {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.quick-filters-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+  margin-right: 4px;
+}
+.filter-chip {
+  padding: 6px 12px;
+  font-size: 12.5px;
+  font-weight: 600;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  cursor: pointer;
+}
+.filter-chip:hover {
+  background: var(--soft);
+  border-color: var(--accent);
+  filter: none;
+}
+.filter-chip.is-active {
+  background: var(--accent);
+  color: #ffffff;
+  border-color: var(--accent);
+}
+
 @media (max-width: 980px) {
   .phase-stepper {
     grid-template-columns: repeat(2, minmax(0, 1fr));

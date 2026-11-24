@@ -8,3 +8,5 @@ export * from "./admin";
 export * from "./studyPlans";
 export * from "./registrationPhase";
 export * from "./scheduler";
+export * from "./tuition";
+export * from "./notifications";

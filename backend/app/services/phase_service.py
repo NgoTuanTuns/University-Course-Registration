@@ -64,8 +64,19 @@ def build_phase_payload(
     phase_ends_at: datetime | None = None,
     note: str | None = None,
     updated_at: datetime | None = None,
+    now: datetime | None = None,
 ) -> dict:
     can_edit_sp, can_enroll = phase_permissions(phase)
+    current_now = now or datetime.now(UTC)
+    if phase_ends_at is not None:
+        ends_utc = (
+            phase_ends_at.replace(tzinfo=UTC)
+            if phase_ends_at.tzinfo is None
+            else phase_ends_at.astimezone(UTC)
+        )
+        if ends_utc <= current_now:
+            can_edit_sp = False
+            can_enroll = False
     meta = PHASE_METADATA[phase]
     return {
         "term": term,

@@ -2,18 +2,24 @@
 
 from __future__ import annotations
 
+from collections import defaultdict
+
 from sqlalchemy import exists, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import api_error
+from app.core.faculty import course_allowed_for_faculty
 from app.models import (
     CompletedCourse,
+    Course,
     CourseOffering,
     Enrollment,
+    Prerequisite,
     Student,
     Waitlist,
 )
 from app.services import enrollment_service
+from app.services.prerequisite_engine import PrerequisiteGraph, evaluate
 
 # Bảo vệ các tài khoản sinh viên dùng cho kịch bản demo để admin không lỡ điền/hủy nhầm
 PROTECTED_DEMO_EMAILS = frozenset(
@@ -67,22 +73,64 @@ async def fill_offering_to_capacity(session: AsyncSession, offering_id: int) -> 
         )
     )
 
-    candidate_ids = list(
-        (
-            await session.scalars(
-                select(Student.id)
-                .where(
-                    Student.role == "student",
-                    Student.email.notin_(PROTECTED_DEMO_EMAILS),
-                    ~has_active_enr,
-                    ~has_completed,
-                    ~has_waitlist,
+    course = await session.get(Course, offering.course_id)
+    if course is None:
+        raise api_error(404, "NOT_FOUND", "Không tìm thấy học phần")
+
+    pool_rows = (
+        await session.execute(
+            select(Student.id, Student.faculty, Student.accumulated_credits)
+            .where(
+                Student.role == "student",
+                Student.email.notin_(PROTECTED_DEMO_EMAILS),
+                Student.accumulated_credits >= course.min_accumulated_credits,
+                ~has_active_enr,
+                ~has_completed,
+                ~has_waitlist,
+            )
+            .order_by(Student.id.desc())
+        )
+    ).all()
+
+    faculty_ok_ids = [
+        int(sid)
+        for sid, fac, _acc in pool_rows
+        if not fac or course_allowed_for_faculty(course.code, str(fac))
+    ]
+
+    # Nạp đồ thị tiên quyết 1 lần để bảo đảm 100% bất biến I9 (mọi ACTIVE enrollment đạt tiên quyết)
+    prereq_edges = (
+        await session.execute(
+            select(
+                Prerequisite.course_id,
+                Prerequisite.prereq_course_id,
+                Prerequisite.type,
+                Prerequisite.group_no,
+            )
+        )
+    ).all()
+    graph = PrerequisiteGraph.from_edges(
+        [(int(c), int(p), str(t), int(g)) for c, p, t, g in prereq_edges]
+    )
+
+    completed_by_sid: dict[int, set[int]] = defaultdict(set)
+    if faculty_ok_ids:
+        comp_rows = (
+            await session.execute(
+                select(CompletedCourse.student_id, CompletedCourse.course_id).where(
+                    CompletedCourse.student_id.in_(faculty_ok_ids)
                 )
-                .order_by(Student.id.desc())
-                .limit(needed)
             )
         ).all()
-    )
+        for sid, cid in comp_rows:
+            completed_by_sid[int(sid)].add(int(cid))
+
+    candidate_ids: list[int] = []
+    for sid in faculty_ok_ids:
+        if evaluate(graph, course.id, completed_by_sid[sid]).eligible:
+            candidate_ids.append(sid)
+            if len(candidate_ids) >= needed:
+                break
 
     for sid in candidate_ids:
         session.add(

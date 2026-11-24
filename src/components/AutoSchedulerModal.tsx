@@ -501,17 +501,27 @@ export function AutoSchedulerModal({
                   <button
                     type="button"
                     className="btn-tdtu-red"
-                    disabled={!canEnroll || batchBusy || !activePlan}
+                    disabled={
+                      !canEnroll ||
+                      batchBusy ||
+                      !activePlan ||
+                      activePlan.totalCredits > data.maxCredits
+                    }
                     title={
                       !canEnroll
                         ? "Cổng đăng ký học phần hiện đang đóng"
-                        : undefined
+                        : activePlan &&
+                            activePlan.totalCredits > data.maxCredits
+                          ? `Tổng tín chỉ (${activePlan.totalCredits} TC) vượt hạn mức ${data.maxCredits} TC — vui lòng bỏ bớt môn ở cột bên trái.`
+                          : undefined
                     }
                     onClick={() => void handleBatchEnroll()}
                   >
                     {batchBusy
                       ? "Đang đăng ký hàng loạt…"
-                      : `Đăng ký toàn bộ Phương án ${activePlan?.rank}`}
+                      : activePlan && activePlan.totalCredits > data.maxCredits
+                        ? `Vượt hạn mức (${activePlan.totalCredits}/${data.maxCredits} TC)`
+                        : `Đăng ký toàn bộ Phương án ${activePlan?.rank}`}
                   </button>
                 </div>
 

@@ -22,6 +22,7 @@ import {
   Moon,
   Search,
   Sparkles,
+  Download,
   ChevronRight,
   ShieldCheck,
   Menu,
@@ -30,6 +31,9 @@ import { UniFlowLogo } from "./components/UniFlowLogo";
 import { PhaseBanner } from "./components/PhaseBanner";
 import { SwapSectionModal } from "./components/SwapSectionModal";
 import { AutoSchedulerModal } from "./components/AutoSchedulerModal";
+import { TuitionPanel } from "./components/TuitionPanel";
+import { NotificationBell } from "./components/NotificationBell";
+import { downloadTimetableIcs } from "./features/timetable/icsExport";
 import * as api from "./api";
 import { getSession, setSession } from "./api/http";
 import type { Offering, Enrollment, Session } from "./types";
@@ -56,6 +60,11 @@ export default function App() {
   const [toast, setToast] = useState("");
   const [regs, setRegs] = useState<Enrollment[]>([]);
   const [waitlistItems, setWaitlistItems] = useState<api.WaitlistEntry[]>([]);
+  const [tuition, setTuition] = useState<api.TuitionEstimate | null>(null);
+  const [notifications, setNotifications] = useState<api.StudentNotification[]>(
+    [],
+  );
+  const prevWaitlistRef = useRef<api.WaitlistEntry[]>([]);
   const [preview, setPreview] = useState<Offering | null>(null);
   const [swapTarget, setSwapTarget] = useState<Enrollment | null>(null);
   const [showAutoScheduler, setShowAutoScheduler] = useState(false);
@@ -72,15 +81,47 @@ export default function App() {
   };
   async function load() {
     try {
-      const [nextRegs, nextWaitlist] = await Promise.all([
-        api.timetable(),
-        api
-          .getWaitlist()
-          .then((w) => w.items)
-          .catch(() => [] as api.WaitlistEntry[]),
-      ]);
+      const [nextRegs, nextWaitlist, nextTuition, nextNotifRes] =
+        await Promise.all([
+          api.timetable(),
+          api
+            .getWaitlist()
+            .then((w) => w.items)
+            .catch(() => [] as api.WaitlistEntry[]),
+          api.getMyTuition().catch(() => null),
+          api
+            .getMyNotifications()
+            .then((n) => n.items)
+            .catch(() => [] as api.StudentNotification[]),
+        ]);
+      // Phát hiện sinh viên vừa được đôn từ danh sách chờ lên lớp chính thức
+      const activeOffIds = new Set(nextRegs.map((e) => e.offering.id));
+      const nextWlIds = new Set(nextWaitlist.map((w) => w.offeringId));
+      const promotedNow = prevWaitlistRef.current.filter(
+        (prev) =>
+          !nextWlIds.has(prev.offeringId) && activeOffIds.has(prev.offeringId),
+      );
+      const promoAlerts: api.StudentNotification[] = promotedNow.map((p) => ({
+        id: `waitlist-promoted-${p.offeringId}-${p.id}`,
+        kind: "WAITLIST_PROMOTED",
+        title: `Đã được đôn vào lớp ${p.offering.code} (Lớp ${p.offering.section})`,
+        message: `Chúc mừng! Bạn đã được tự động chuyển từ Danh sách chờ sang đăng ký chính thức học phần ${p.offering.name}.`,
+        link: "/timetable",
+        createdAt: new Date().toISOString(),
+      }));
+      prevWaitlistRef.current = nextWaitlist;
+
       setRegs(nextRegs);
       setWaitlistItems(nextWaitlist);
+      setTuition(nextTuition);
+      setNotifications((cur) => {
+        const existingPromos = cur.filter(
+          (n) =>
+            n.kind === "WAITLIST_PROMOTED" &&
+            !promoAlerts.some((p) => p.id === n.id),
+        );
+        return [...promoAlerts, ...existingPromos, ...nextNotifRes];
+      });
       setPreview((cur) =>
         cur && nextRegs.some((e) => e.offering.id === cur.id) ? null : cur,
       );
@@ -97,6 +138,9 @@ export default function App() {
     // Always reset previous user's timetable/preview state on account switch or logout
     setRegs([]);
     setWaitlistItems([]);
+    setTuition(null);
+    setNotifications([]);
+    prevWaitlistRef.current = [];
     setPreview(null);
     setSwapTarget(null);
     setShowAutoScheduler(false);
@@ -122,9 +166,15 @@ export default function App() {
           /* non-blocking */
         });
     };
+    const onFocus = () => {
+      syncPhase();
+      if (session.user.role === "student" && week >= 2) {
+        void load();
+      }
+    };
     syncPhase();
-    window.addEventListener("focus", syncPhase);
-    return () => window.removeEventListener("focus", syncPhase);
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
   }, [session, location.pathname]);
   useEffect(() => {
     const expire = () => {
@@ -340,6 +390,12 @@ export default function App() {
             <ChevronRight size={14} /> <b>Học kỳ II, 2026–2027 (2026-2)</b>
           </span>
           <div className="header-right">
+            {!admin && (
+              <NotificationBell
+                userId={session.user.id}
+                notifications={notifications}
+              />
+            )}
             <button
               aria-label="Đổi giao diện sáng tối"
               onClick={() => setDark(!dark)}
@@ -523,7 +579,7 @@ export default function App() {
                             <strong className="metric-value">
                               {regs.length}
                             </strong>
-                            <small>Học kỳ 2026-2</small>
+                            <small>{weeklySessions} ca học / tuần</small>
                           </button>
 
                           <button
@@ -532,12 +588,15 @@ export default function App() {
                             onClick={() => nav("/timetable")}
                           >
                             <span className="metric-label">
-                              Buổi học mỗi tuần
+                              Học phí tạm tính
                             </span>
-                            <strong className="metric-value">
-                              {weeklySessions}
+                            <strong
+                              className="metric-value"
+                              style={{ fontSize: 21, color: "var(--red)" }}
+                            >
+                              {api.formatVnd(tuition?.totalAmount ?? 0)}
                             </strong>
-                            <small>Khung giờ 07:00 – 21:00</small>
+                            <small>Bảng kê chi tiết kỳ 2026-2</small>
                           </button>
                         </div>
 
@@ -719,6 +778,24 @@ export default function App() {
                         >
                           <option>Học kỳ 2026-2</option>
                         </select>
+                        <button
+                          type="button"
+                          className="btn-outline"
+                          disabled={!regs.length}
+                          title={
+                            !regs.length
+                              ? "Bạn chưa đăng ký lớp học phần nào để xuất lịch"
+                              : "Tải file .ics nhập vào Google Calendar / Apple Calendar"
+                          }
+                          onClick={() => {
+                            downloadTimetableIcs(regs, "2026-2");
+                            notify(
+                              "Đã tải file UniFlow-TKB-2026-2.ics — có thể nhập thẳng vào Google Calendar / Apple Calendar.",
+                            );
+                          }}
+                        >
+                          <Download size={14} /> Xuất lịch (.ics)
+                        </button>
                         <button
                           type="button"
                           className="btn-outline"
@@ -982,6 +1059,7 @@ export default function App() {
                         </div>
                       </section>
                     )}
+                    <TuitionPanel tuition={tuition} id="tuition" />
                   </>
                 ) : (
                   <Navigate to="/courses" />
@@ -1142,10 +1220,40 @@ function Courses({
   const [adminBusyId, setAdminBusyId] = useState<number | null>(null);
   const [waitlistBusyId, setWaitlistBusyId] = useState<number | null>(null);
   const [reason, setReason] = useState("");
+  const [quickFilters, setQuickFilters] = useState({
+    onlyStudyPlan: false,
+    hideConflicts: false,
+    onlyAvailable: false,
+    onlyEligible: false,
+  });
   const enrolledByOfferingId = new Map(regs.map((e) => [e.offering.id, e]));
+  const enrolledOfferingsList = regs.map((e) => e.offering);
   const waitlistByOfferingId = new Map(
     waitlistItems.map((w) => [w.offeringId, w]),
   );
+  const hasQuickFilter =
+    quickFilters.onlyStudyPlan ||
+    quickFilters.hideConflicts ||
+    quickFilters.onlyAvailable ||
+    quickFilters.onlyEligible;
+  const visibleItems = items.filter((o) => {
+    if (quickFilters.onlyStudyPlan && !o.inStudyPlan) return false;
+    if (quickFilters.onlyAvailable && o.enrolledCount >= o.capacity)
+      return false;
+    if (
+      quickFilters.onlyEligible &&
+      o.eligibilityStatus !== "RECOMMENDED" &&
+      o.eligibilityStatus !== "ELIGIBLE"
+    )
+      return false;
+    if (quickFilters.hideConflicts && !enrolledByOfferingId.has(o.id)) {
+      const hasConflict = o.schedule.some(
+        (slot) => findSlotConflicts(o, slot, enrolledOfferingsList).length > 0,
+      );
+      if (hasConflict) return false;
+    }
+    return true;
+  });
 
   async function handleLeaveWaitlist(entry: api.WaitlistEntry) {
     if (waitlistBusyId !== null) return;
@@ -1363,7 +1471,18 @@ function Courses({
           <h3>
             <Search size={18} /> Bộ lọc học phần
           </h3>
-          <button className="text-button" onClick={() => setParams({})}>
+          <button
+            className="text-button"
+            onClick={() => {
+              setParams({});
+              setQuickFilters({
+                onlyStudyPlan: false,
+                hideConflicts: false,
+                onlyAvailable: false,
+                onlyEligible: false,
+              });
+            }}
+          >
             Xóa bộ lọc
           </button>
         </div>
@@ -1401,13 +1520,51 @@ function Courses({
             </select>
           </label>
         </div>
+        {!isAdmin && (
+          <div className="quick-filters" aria-label="Bộ lọc nhanh">
+            <span className="quick-filters-label">Lọc nhanh:</span>
+            {[
+              ["onlyStudyPlan", "Chỉ môn trong KHHT"],
+              ["hideConflicts", "Ẩn lớp trùng lịch hiện tại"],
+              ["onlyAvailable", "Chỉ lớp còn chỗ"],
+              ["onlyEligible", "Đủ điều kiện"],
+            ].map(([key, label]) => {
+              const active = quickFilters[key as keyof typeof quickFilters];
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  className={`filter-chip ${active ? "is-active" : ""}`}
+                  aria-pressed={active}
+                  onClick={() =>
+                    setQuickFilters((cur) => ({
+                      ...cur,
+                      [key]: !cur[key as keyof typeof cur],
+                    }))
+                  }
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        )}
       </section>
       <section className="panel results">
         <div className="section-title">
           <h3>
-            Danh sách học phần <span className="count">{total}</span>
+            Danh sách học phần{" "}
+            <span className="count">
+              {hasQuickFilter
+                ? `${visibleItems.length}/${items.length}`
+                : total}
+            </span>
           </h3>
-          <span className="muted">20 kết quả / trang</span>
+          <span className="muted">
+            {hasQuickFilter
+              ? `Đang lọc nhanh trên trang (${visibleItems.length} lớp khớp)`
+              : "20 kết quả / trang"}
+          </span>
         </div>
         {loading ? (
           <div className="skeleton">Đang tải học phần…</div>
@@ -1416,8 +1573,27 @@ function Courses({
             {error}
             <button onClick={() => setRetry((n) => n + 1)}>Thử lại</button>
           </div>
-        ) : !items.length ? (
-          <div className="empty">Không tìm thấy học phần phù hợp.</div>
+        ) : !visibleItems.length ? (
+          <div className="empty">
+            <div>Không tìm thấy học phần phù hợp với bộ lọc hiện tại.</div>
+            {hasQuickFilter && (
+              <button
+                type="button"
+                className="btn-outline"
+                style={{ marginTop: 10 }}
+                onClick={() =>
+                  setQuickFilters({
+                    onlyStudyPlan: false,
+                    hideConflicts: false,
+                    onlyAvailable: false,
+                    onlyEligible: false,
+                  })
+                }
+              >
+                Bỏ bộ lọc nhanh
+              </button>
+            )}
+          </div>
         ) : (
           <div className="table-scroll">
             <table>
@@ -1436,7 +1612,7 @@ function Courses({
                 </tr>
               </thead>
               <tbody>
-                {items.map((o) => {
+                {visibleItems.map((o) => {
                   const enrolledEntry = enrolledByOfferingId.get(o.id);
                   const isEnrolled = Boolean(enrolledEntry);
                   const waitlistEntry = waitlistByOfferingId.get(o.id);

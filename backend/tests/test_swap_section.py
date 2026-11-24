@@ -64,6 +64,15 @@ async def test_swap_section_success_and_promotes_waitlist(
     assert body["to_offering_id"] == sec2.id
     assert body["promoted_student_id"] == s2.id
 
+    # Gửi lại đúng yêu cầu với cùng Idempotency-Key -> trả lại đúng kết quả 200 SWAPPED (không lỗi 409)
+    retry_res = await async_client.post(
+        "/api/v1/enroll/swap",
+        json={"from_enrollment_id": enr1_id, "to_offering_id": sec2.id},
+        headers={**login_as(s1), "Idempotency-Key": "swap-1"},
+    )
+    assert retry_res.status_code == 200, retry_res.text
+    assert retry_res.json() == body
+
     # Kiểm tra lại sĩ số và toàn vẹn DB
     sec1_id, sec2_id = sec1.id, sec2.id
     test_session.expire_all()

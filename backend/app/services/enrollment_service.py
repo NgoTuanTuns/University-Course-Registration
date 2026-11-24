@@ -175,12 +175,22 @@ async def cached_result(key: str | None) -> dict | None:
         async with asyncio.timeout(0.3):
             raw = await get_redis().get(key)
         result = json.loads(raw) if raw else None
-        if (
-            not isinstance(result, dict)
-            or not {"id", "offering_id", "status"} <= result.keys()
-        ):
+        if not isinstance(result, dict):
             return None
-        if result["status"] not in {"ACTIVE", "WAITLISTED"}:
+        if (
+            result.get("status") == "SWAPPED"
+            and {
+                "from_enrollment_id",
+                "new_enrollment_id",
+                "from_offering_id",
+                "to_offering_id",
+            }
+            <= result.keys()
+        ):
+            return result
+        if not {"id", "offering_id", "status"} <= result.keys() or result[
+            "status"
+        ] not in {"ACTIVE", "WAITLISTED"}:
             return None
         return result
     except (RedisError, OSError, TimeoutError, ValueError):
@@ -438,6 +448,19 @@ async def swap_section(
     key = f"idem:swap:{student_id}:{idempotency_key}" if idempotency_key else None
 
     async def operation() -> dict:
+        cached = await cached_result(key)
+        if cached and cached.get("_committed"):
+            if (
+                cached.get("from_enrollment_id") != from_enrollment_id
+                or cached.get("to_offering_id") != to_offering_id
+            ):
+                raise api_error(
+                    409,
+                    "IDEMPOTENCY_KEY_REUSED",
+                    "Idempotency-Key đã được dùng cho yêu cầu đổi lớp khác",
+                )
+            return {k: v for k, v in cached.items() if k != "_committed"}
+
         enrollment = await session.scalar(
             select(Enrollment)
             .where(
@@ -469,6 +492,7 @@ async def swap_section(
         if student_id not in students:
             raise api_error(404, "NOT_FOUND", "Không tìm thấy sinh viên")
 
+        # Kiểm tra lại cache sau khi đã giữ khóa sinh viên để tránh race retry song song
         cached = await cached_result(key)
         if cached and cached.get("_committed"):
             if (
