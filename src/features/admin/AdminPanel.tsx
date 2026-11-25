@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import * as api from "../../api";
 import type { AdminStudyPlanSummaryResponse } from "../../types";
 import { formatPrereqCycleMessage } from "../registration/helpers";
+import { pinCourseInDag } from "../prerequisites/PrerequisiteGraphView";
 
 export default function AdminPanel({
   notify,
@@ -192,7 +193,10 @@ function AdminCourses({ notify }: { notify: (s: string) => void }) {
           save={async (data) => {
             try {
               if (editing.id) await api.updateAdminCourse(editing.id, data);
-              else await api.createAdminCourse(data);
+              else {
+                const created = await api.createAdminCourse(data);
+                pinCourseInDag(created.id);
+              }
               setEditing(null);
               await load(page, q);
               notify("Đã lưu học phần");
@@ -269,6 +273,7 @@ function AdminPrereqs({ notify }: { notify: (s: string) => void }) {
         type,
         groupNo,
       });
+      pinCourseInDag(courseId, prereq);
       await load(courseId);
       notify("Đã thêm điều kiện tiên quyết");
     } catch (e) {

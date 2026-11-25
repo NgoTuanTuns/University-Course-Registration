@@ -38,6 +38,40 @@ const KIT_CODES = new Set([
   "INT431",
 ]);
 
+const SEEDED_CODE_PATTERN = /^(INT|ELE|MAN|MAT|PHY|ENG|BAS)[1-7]\d{2}$/;
+const PINNED_DAG_STORAGE_KEY = "uniflow_custom_dag_courses";
+
+export function pinCourseInDag(...courseIds: number[]): void {
+  try {
+    const raw = window.localStorage.getItem(PINNED_DAG_STORAGE_KEY);
+    const prev: number[] = raw ? JSON.parse(raw) : [];
+    const next = Array.from(
+      new Set([
+        ...prev,
+        ...courseIds.filter((id) => Number.isFinite(id) && id > 0),
+      ]),
+    );
+    window.localStorage.setItem(PINNED_DAG_STORAGE_KEY, JSON.stringify(next));
+  } catch {
+    // Ignore storage errors in restricted contexts
+  }
+}
+
+function getPinnedDagCourseIds(): Set<number> {
+  try {
+    const raw = window.localStorage.getItem(PINNED_DAG_STORAGE_KEY);
+    const parsed: unknown = raw ? JSON.parse(raw) : [];
+    if (Array.isArray(parsed)) {
+      return new Set(
+        parsed.filter((v): v is number => typeof v === "number" && v > 0),
+      );
+    }
+  } catch {
+    // Ignore storage errors
+  }
+  return new Set();
+}
+
 const PREFIX_LABELS: Record<string, string> = {
   INT: "Ngành CNTT (INT)",
   ELE: "Điện - Điện tử (ELE)",
@@ -346,11 +380,55 @@ export default function PrerequisiteGraphView({
     [graph],
   );
 
+  const kitNodeIds = useMemo(() => {
+    const ids = new Set<number>();
+    if (!graph) return ids;
+    const pinned = getPinnedDagCourseIds();
+    const customIds = new Set<number>();
+    for (const n of graph.nodes) {
+      if (KIT_CODES.has(n.code)) {
+        ids.add(n.id);
+      } else if (pinned.has(n.id) || !SEEDED_CODE_PATTERN.test(n.code)) {
+        ids.add(n.id);
+        customIds.add(n.id);
+      }
+    }
+    // Include direct neighbors of custom/newly added courses so their edges render
+    if (customIds.size > 0) {
+      for (const e of graph.edges) {
+        if (customIds.has(e.courseId)) ids.add(e.prereqCourseId);
+        if (customIds.has(e.prereqCourseId)) ids.add(e.courseId);
+      }
+    }
+    return ids;
+  }, [graph]);
+
   const visibleNodes = useMemo(() => {
     if (!graph) return [];
     const q = search.trim().toLowerCase();
+
+    // When searching, search across all courses and include direct neighbors so edges stay visible
+    if (q) {
+      const matchedIds = new Set<number>();
+      for (const n of graph.nodes) {
+        if (statusFilter !== "ALL" && n.status !== statusFilter) continue;
+        if (
+          n.code.toLowerCase().includes(q) ||
+          n.name.toLowerCase().includes(q)
+        ) {
+          matchedIds.add(n.id);
+        }
+      }
+      const expandedIds = new Set<number>(matchedIds);
+      for (const e of graph.edges) {
+        if (matchedIds.has(e.courseId)) expandedIds.add(e.prereqCourseId);
+        if (matchedIds.has(e.prereqCourseId)) expandedIds.add(e.courseId);
+      }
+      return graph.nodes.filter((n) => expandedIds.has(n.id));
+    }
+
     return graph.nodes.filter((n) => {
-      if (groupFilter === "KIT" && !KIT_CODES.has(n.code)) return false;
+      if (groupFilter === "KIT" && !kitNodeIds.has(n.id)) return false;
       if (
         groupFilter !== "ALL" &&
         groupFilter !== "KIT" &&
@@ -359,16 +437,9 @@ export default function PrerequisiteGraphView({
         return false;
       }
       if (statusFilter !== "ALL" && n.status !== statusFilter) return false;
-      if (
-        q &&
-        !n.code.toLowerCase().includes(q) &&
-        !n.name.toLowerCase().includes(q)
-      ) {
-        return false;
-      }
       return true;
     });
-  }, [graph, groupFilter, statusFilter, search]);
+  }, [graph, groupFilter, kitNodeIds, statusFilter, search]);
 
   const visibleIdSet = useMemo(
     () => new Set(visibleNodes.map((n) => n.id)),
@@ -528,7 +599,9 @@ export default function PrerequisiteGraphView({
         }}
       >
         {hasKitCourses && (
-          <option value="KIT">Bộ môn cốt lõi (KIT — 12 môn)</option>
+          <option value="KIT">
+            Bộ môn cốt lõi (KIT — {kitNodeIds.size} môn)
+          </option>
         )}
         {availablePrefixes.map((prefix) => (
           <option key={prefix} value={prefix}>
