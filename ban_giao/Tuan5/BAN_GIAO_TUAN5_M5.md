@@ -9,6 +9,8 @@
 - [x] Tạo nhánh làm việc riêng `m5-week5-loadtest-rerun` từ `origin/main`; không sửa trực tiếp `main`.
 - [x] Kiểm tra `docker compose --profile loadtest config -q`; cấu hình profile tải hợp lệ.
 - [x] Chạy `tests/test_enrollment_concurrency.py` 20 lượt liên tiếp trên database test cô lập `course_reg_test`; mỗi lượt 13/13 pass, tổng cộng 260 test pass, không ghi nhận flaky failure.
+- [x] Thêm `.github/workflows/nightly-stability.yml`: chạy lặp bộ concurrency 20 lượt mỗi đêm hoặc thủ công; `pip-audit`/`npm audit` chỉ báo cáo, không chặn merge; secret scan vẫn chặn khi phát hiện lỗi.
+- [ ] Xác nhận workflow mới chạy xanh trên GitHub. Lịch tự động chỉ bắt đầu sau khi workflow được merge vào `main`.
 - [ ] Chạy lại ba baseline hot5 2.000 người trên phiên bản hiện tại và lập bảng trước/sau. Tạm hoãn đến khi RAM trống đủ và nhóm xác nhận các thay đổi tối ưu đã tích hợp.
 - [ ] Bổ sung peak CPU/RAM và PostgreSQL lock/connection metrics đồng bộ trong lúc tải.
 - [ ] Phân tích, sửa hoặc ghi nhận owner cho mọi test không ổn định nếu các lượt sau phát hiện lỗi.
@@ -33,6 +35,7 @@
 - Nơi chạy: container API local; fixture test kiểm tra URL và chỉ cho phép `course_reg_test`. Bộ test tự làm sạch dữ liệu kiểm thử giữa các test.
 - Kết quả: 20/20 lượt thành công; mỗi lượt 13 passed; tổng cộng 260 test case executions, không có failure.
 - Đây là bằng chứng ổn định cục bộ cho riêng bộ concurrency, chưa thay cho nightly workflow hoặc toàn bộ integration suite.
+- Workflow mới chưa được chạy trên GitHub; PR review và CI vẫn cần xác nhận trước khi xem là đã tích hợp.
 
 ## 4. Rủi ro và cách kiểm soát
 
