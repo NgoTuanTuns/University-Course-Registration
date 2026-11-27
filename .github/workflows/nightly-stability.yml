@@ -1,0 +1,103 @@
+name: Nightly stability and dependency audit
+
+on:
+  schedule:
+    - cron: "0 20 * * *" # 03:00 ICT (UTC+7)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  concurrency-stability:
+    name: Repeat concurrency tests 20 times
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15.16-alpine3.23
+        env:
+          POSTGRES_USER: course_user
+          POSTGRES_PASSWORD: ${{ github.run_id }}
+          POSTGRES_DB: course_reg
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U course_user -d course_reg"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+      redis:
+        image: redis:7.4.12-alpine3.21
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+    env:
+      APP_ENV: test
+      POSTGRES_USER: course_user
+      POSTGRES_PASSWORD: ${{ github.run_id }}
+      POSTGRES_DB: course_reg
+      TEST_POSTGRES_DB: course_reg_test
+      DATABASE_URL: postgresql+asyncpg://course_user:${{ github.run_id }}@localhost:5432/course_reg
+      TEST_DATABASE_URL: postgresql+asyncpg://course_user:${{ github.run_id }}@localhost:5432/course_reg_test
+      REDIS_URL: redis://localhost:6379/0
+      TEST_REDIS_URL: redis://localhost:6379/1
+      JWT_SECRET: ci-only-not-a-real-secret-value
+      DB_POOL_SIZE: 5
+      DB_MAX_OVERFLOW: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements.txt
+      - run: python -m pip install -r requirements.txt
+      - name: Create isolated test database
+        run: |
+          PGPASSWORD="$POSTGRES_PASSWORD" psql -h localhost -U "$POSTGRES_USER" -d postgres \
+            -c "CREATE DATABASE $TEST_POSTGRES_DB OWNER $POSTGRES_USER"
+      - name: Repeat concurrency suite 20 times
+        working-directory: backend
+        run: |
+          for iteration in {1..20}; do
+            echo "::group::Concurrency iteration ${iteration}/20"
+            pytest tests/test_enrollment_concurrency.py -q --no-cov
+            echo "::endgroup::"
+          done
+
+  dependency-audit:
+    name: Non-blocking dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: pip-audit (report only)
+        continue-on-error: true
+        run: |
+          python -m pip install --disable-pip-version-check pip-audit
+          pip-audit -r requirements.txt
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24.21.0"
+      - name: npm audit (report only)
+        continue-on-error: true
+        run: |
+          if [ -f package.json ] && [ -f package-lock.json ]; then
+            npm audit --audit-level=high
+          else
+            echo "::notice::No root package-lock.json; npm audit skipped."
+          fi
+
+  secret-scan:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_ENABLE_COMMENTS: "false"
